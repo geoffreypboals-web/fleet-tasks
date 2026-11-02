@@ -396,6 +396,12 @@ def test_claude_tasks_run_while_a_long_gemini_call_is_going(env):
     loop = threading.Thread(target=fleet.frontier_loop, args=(stop,), daemon=True)
     loop.start()
     try:
+        # Wait for the Gemini call to start (a busy CI runner can take a moment),
+        # then Claude's task must finish while that 5-second call is still going.
+        deadline = time.time() + 10
+        while time.time() < deadline and "gemini" not in fleet.answering():
+            time.sleep(0.05)
+        assert "gemini" in fleet.answering(), "the Gemini call never started"
         deadline = time.time() + 4                        # well before the Gemini call can end
         while time.time() < deadline and task(fleet, quick)["status"] != "done":
             time.sleep(0.1)
