@@ -1,0 +1,15 @@
+# systemd --user: the fleet-tasks workers (one per tailnet Ollama endpoint, plus the frontier gate).
+[Unit]
+Description=Local-first AI task queue workers (tailnet Ollama, gated frontier)
+After=network-online.target
+
+[Service]
+Environment=PYTHONUNBUFFERED=1
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/python3 /opt/stacks/fleet-tasks/fleet.py run
+Restart=on-failure
+RestartSec=30
+Nice=10
+
+[Install]
+WantedBy=default.target

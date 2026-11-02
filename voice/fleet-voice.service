@@ -1,0 +1,11 @@
+[Unit]
+Description=fleet-tasks voice: speech to text for the page's text boxes (CPU, local)
+
+[Service]
+ExecStart=%h/.local/opt/fleet-voice/bin/python /opt/stacks/fleet-tasks/voice/voice.py
+Restart=on-failure
+RestartSec=10
+Nice=5
+
+[Install]
+WantedBy=default.target

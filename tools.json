@@ -1,0 +1,222 @@
+{
+  "_about": "Every outside tool fleet-tasks can use beyond its core (the core is in REQUIREMENTS.md: Python, SQLite, systemd, Tailscale, Ollama). One entry per tool: what it is, which features need it, how doctor.py checks it, how to get it, and its licence. doctor.py checks each one; the host scan (fleet.py scan) uses the same list; tests/test_fleet_doctor.py keeps REQUIREMENTS.md's tool table in step with this file. Addresses a site changes go in policy.json \"tools\": {\"<id>\": {\"url\": \"...\"}}; nothing here is specific to one machine.",
+  "_check_types": {
+    "program": "a program on PATH (\"cmd\"), its version from \"version_args\"",
+    "http_json": "GET url + \"path\" answers JSON; each key in \"fields\" must be true (the services inside it)",
+    "venv": "a Python at \"python\" can import \"imports\"; \"cuda\": true also needs a GPU it can see",
+    "ollama_model": "one of \"models\" is pulled on any Ollama endpoint in policy.json",
+    "secret": "fleet-secret list --service \"service\" names \"name\" (names only, never the value), or the env var \"name\" is set",
+    "gpu": "nvidia-smi shows a GPU with at least \"min_mib\" memory and a driver of at least \"min_driver\"",
+    "inside": "reported by another tool's check (\"of\": its id, \"field\": the key)",
+    "manual": "can't be checked from here; \"how\" says how to check by hand"
+  },
+  "tools": [
+    {
+      "id": "print3d",
+      "name": "3D print prompt tool (3d-printing-model-prompt)",
+      "kind": "service",
+      "used_for": [
+        "design: build structural parts (OpenSCAD/CadQuery)",
+        "design: preview render (/thumbnail)",
+        "design: watertight and overhang checks",
+        "design: Meshy jobs (its key stays in that app)"
+      ],
+      "check": {
+        "type": "http_json",
+        "default_url": "http://127.0.0.1:8000",
+        "path": "/health",
+        "fields": [
+          "openscad_available",
+          "blender_available",
+          "freecad_available",
+          "llm_reachable"
+        ]
+      },
+      "install": "https://github.com/geoffreypboals-web/3d-printing-model-prompt (docker compose up -d); then set policy.json tools.print3d.url to its address",
+      "licence": "MIT",
+      "commercial": "yes"
+    },
+    {
+      "id": "openscad",
+      "name": "OpenSCAD",
+      "kind": "program (inside the 3D print tool)",
+      "used_for": [
+        "design: structural parts from a written spec"
+      ],
+      "check": {
+        "type": "inside",
+        "of": "print3d",
+        "field": "openscad_available"
+      },
+      "install": "in the 3D print tool's image; https://openscad.org",
+      "licence": "GPL-2.0 (run as a separate program, not linked)",
+      "commercial": "yes"
+    },
+    {
+      "id": "blender",
+      "name": "Blender",
+      "kind": "program (inside the 3D print tool)",
+      "used_for": [
+        "design: preview renders",
+        "design: mesh repair, thickening, organic shapes"
+      ],
+      "check": {
+        "type": "inside",
+        "of": "print3d",
+        "field": "blender_available"
+      },
+      "install": "in the 3D print tool's image; https://www.blender.org",
+      "licence": "GPL-2.0-or-later (run as a separate program)",
+      "commercial": "yes"
+    },
+    {
+      "id": "freecad",
+      "name": "FreeCAD (headless freecadcmd)",
+      "kind": "program (inside the 3D print tool)",
+      "used_for": [
+        "design: STEP export",
+        "design: solid repair"
+      ],
+      "check": {
+        "type": "inside",
+        "of": "print3d",
+        "field": "freecad_available"
+      },
+      "install": "in the 3D print tool's image (freecad-python3); https://www.freecad.org",
+      "licence": "LGPL-2.1-or-later",
+      "commercial": "yes"
+    },
+    {
+      "id": "meshy",
+      "name": "Meshy AI (paid web service)",
+      "kind": "account",
+      "used_for": [
+        "design: artistic parts (an approved image -> image-to-3D)",
+        "design: terrain"
+      ],
+      "check": {
+        "type": "manual",
+        "how": "the 3D print tool holds MESHY_API_KEY in its own .env; its Meshy library sync log shows whether calls work. Spends credits: a daily limit in policy.json"
+      },
+      "install": "https://www.meshy.ai: an account and an API key, set in the 3D print tool (never in fleet-tasks)",
+      "licence": "Meshy terms of service",
+      "commercial": "conditions",
+      "licence_note": "who owns a generated model depends on the Meshy plan (free-plan models are public under CC BY 4.0; paid plans are private). Check the plan before selling a design."
+    },
+    {
+      "id": "image-venv",
+      "name": "Image generator environment (PyTorch + diffusers)",
+      "kind": "python environment",
+      "used_for": [
+        "design: a picture from the prompt, for the owner's OK before any 3D work"
+      ],
+      "check": {
+        "type": "venv",
+        "python": "~/.local/opt/fleet-image/bin/python",
+        "imports": [
+          "torch",
+          "diffusers",
+          "transformers",
+          "accelerate",
+          "bitsandbytes"
+        ],
+        "cuda": true
+      },
+      "install": "python3 -m venv ~/.local/opt/fleet-image && ~/.local/opt/fleet-image/bin/pip install torch --index-url https://download.pytorch.org/whl/cu128 && ~/.local/opt/fleet-image/bin/pip install diffusers transformers accelerate sentencepiece protobuf bitsandbytes huggingface_hub pillow (pick the PyTorch CUDA build your driver supports)",
+      "licence": "PyTorch BSD-3-Clause; diffusers, transformers, accelerate Apache-2.0; bitsandbytes MIT",
+      "commercial": "yes"
+    },
+    {
+      "id": "flux-schnell",
+      "name": "FLUX.1 [schnell] image model (black-forest-labs/FLUX.1-schnell)",
+      "kind": "model (about 34 GB download)",
+      "used_for": [
+        "design: the picture for the owner's OK"
+      ],
+      "check": {
+        "type": "secret",
+        "service": "fleet-image",
+        "name": "HF_TOKEN"
+      },
+      "install": "a free Hugging Face account; accept the model's terms on its page (approved at once); a Read token stored with: fleet-secret set --service=fleet-image HF_TOKEN (type the name; paste the token only at the hidden prompt), or the HF_TOKEN env var on a machine without fleet-secret. KEEP THE TOKEN: don't delete or regenerate it on huggingface.co while the fleet uses it (saved 2026-10-28); without it the image step can't download the model. To replace it, make the new one first, then fleet-secret rotate --service=fleet-image HF_TOKEN, then delete the old one.",
+      "licence": "Apache-2.0",
+      "commercial": "yes",
+      "licence_note": "FLUX.1 [dev] is non-commercial: don't swap it in for work you sell."
+    },
+    {
+      "id": "image",
+      "name": "Image service (fleet-image: FLUX.1 schnell on a leased GPU pair)",
+      "kind": "service",
+      "used_for": [
+        "design: the picture of an artistic part, for the owner's OK before Meshy"
+      ],
+      "check": {
+        "type": "http_json",
+        "default_url": "http://127.0.0.1:8963",
+        "path": "/health",
+        "fields": [
+          "ok",
+          "ready"
+        ]
+      },
+      "install": "image/install.sh (venv, one-time model download with HF_TOKEN, user service fleet-image). It takes a GPU pair through gpu_lease.py and waits for that pair's models to leave on their own: it never pushes one out",
+      "licence": "fleet-tasks (this repo); FLUX.1 schnell Apache-2.0",
+      "commercial": "yes"
+    },
+    {
+      "id": "gpu-16g",
+      "name": "NVIDIA GPU, 16 GB, driver for CUDA 12.8+",
+      "kind": "hardware",
+      "used_for": [
+        "design: the image generator (FLUX schnell in 8-bit fits in 16 GB)"
+      ],
+      "check": {
+        "type": "gpu",
+        "min_mib": 15000,
+        "min_driver": "570"
+      },
+      "install": "an NVIDIA card with 16 GB or more and the 570+ driver. On a shared machine the image job takes a GPU through gpu_lease.py, so it never pushes out a loaded Ollama model",
+      "licence": "NVIDIA driver licence",
+      "commercial": "yes"
+    },
+    {
+      "id": "vision-model",
+      "name": "A vision model in Ollama (gemma3:12b or gemma3:27b)",
+      "kind": "model",
+      "used_for": [
+        "design: compare a render with the brief before it reaches the owner"
+      ],
+      "check": {
+        "type": "ollama_model",
+        "models": [
+          "gemma3:27b",
+          "gemma3:12b",
+          "llava:13b"
+        ]
+      },
+      "install": "ollama pull gemma3:12b",
+      "licence": "Gemma Terms of Use (llava:13b: Llama 2 Community Licence)",
+      "commercial": "conditions",
+      "licence_note": "both allow commercial use under their terms and use policies; gemma3 is preferred"
+    },
+    {
+      "id": "voice",
+      "name": "Voice typing service (fleet-voice: faster-whisper small.en)",
+      "kind": "service",
+      "used_for": [
+        "the page: speak into text boxes on a phone"
+      ],
+      "check": {
+        "type": "http_json",
+        "default_url": "http://127.0.0.1:8961",
+        "path": "/health",
+        "fields": [
+          "ok"
+        ]
+      },
+      "install": "voice/install.sh (its own venv in ~/.local/opt/fleet-voice; runs on the CPU)",
+      "licence": "faster-whisper MIT; Whisper model weights MIT",
+      "commercial": "yes"
+    }
+  ]
+}

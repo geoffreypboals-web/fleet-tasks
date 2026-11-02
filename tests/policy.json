@@ -1,0 +1,203 @@
+{
+  "max_attempts": 4,
+  "endpoints": [
+    {
+      "name": "gpu-server-gpu23",
+      "url": "http://127.0.0.1:11436",
+      "model": "qwen3.6:27b",
+      "tier": "large",
+      "num_ctx": 16384
+    },
+    {
+      "name": "gpu-server-gpu01",
+      "url": "http://127.0.0.1:11434",
+      "model": "qwen3.6:27b",
+      "tier": "large",
+      "num_ctx": 16384
+    },
+    {
+      "name": "shared-pc",
+      "url": "http://172.17.0.1:11437",
+      "model": "llama3.1:8b",
+      "tier": "small",
+      "gpu_free_min_pct": 25,
+      "gpu_probe": "http://shared-pc.your-tailnet.ts.net:11439/gpu",
+      "vram_gb": 5
+    },
+    {
+      "name": "laptop",
+      "url": "http://laptop.your-tailnet.ts.net:11434",
+      "model": "qwen2.5-coder:7b",
+      "tier": "small"
+    },
+    {
+      "name": "mini-pc",
+      "url": "http://mini-pc.your-tailnet.ts.net:11434",
+      "model": "llama3.2:3b",
+      "tier": "tiny"
+    }
+  ],
+  "kinds": {
+    "triage": {
+      "tier": "tiny"
+    },
+    "summarize": {
+      "tier": "small"
+    },
+    "classify": {
+      "tier": "small"
+    },
+    "draft": {
+      "tier": "large",
+      "frontier": [
+        "claude",
+        "gemini"
+      ]
+    },
+    "review": {
+      "tier": "large",
+      "frontier": [
+        "claude",
+        "gemini"
+      ]
+    },
+    "code": {
+      "tier": "large",
+      "frontier": [
+        "claude"
+      ]
+    },
+    "hard": {
+      "tier": "frontier",
+      "frontier": [
+        "claude",
+        "gemini"
+      ]
+    },
+    "watch": {
+      "tier": "large",
+      "frontier": []
+    }
+  },
+  "sources": {
+    "roots": [
+      "~"
+    ],
+    "max_chars": 40000,
+    "part_chars": 12000,
+    "max_parts": 120
+  },
+  "memory": {
+    "embed_model": "nomic-embed-text",
+    "embed_on": [
+      "gpu-server-gpu01",
+      "gpu-server-gpu23"
+    ]
+  },
+  "frontier_order": [
+    "claude",
+    "gemini",
+    "copilot"
+  ],
+  "frontier_daily_total": null,
+  "followup_kind": "draft",
+  "approval_expires_days": 3,
+  "frontier": {
+    "claude": {
+      "enabled": true,
+      "cmd": [
+        "claude",
+        "-p",
+        "--model",
+        "{model}",
+        "--tools",
+        "",
+        "--strict-mcp-config",
+        "--output-format",
+        "json"
+      ],
+      "default_model": "sonnet",
+      "json_field": "result",
+      "daily_calls": 10,
+      "max_prompt_chars": 20000,
+      "timeout": 600
+    },
+    "gemini": {
+      "enabled": false,
+      "cmd": [
+        "gemini",
+        "--skip-trust",
+        "-m",
+        "{model}",
+        "--approval-mode",
+        "plan",
+        "--output-format",
+        "json",
+        "-p",
+        "Answer the request above."
+      ],
+      "default_model": "auto",
+      "json_field": "response",
+      "daily_calls": 10,
+      "max_prompt_chars": 20000,
+      "timeout": 600,
+      "cwd": "empty"
+    },
+    "copilot": {
+      "enabled": true,
+      "last_resort": true,
+      "cmd": [
+        "copilot",
+        "-p",
+        "{prompt}",
+        "-s",
+        "--no-color",
+        "--no-auto-update",
+        "--available-tools=fleet_text_only",
+        "--disable-builtin-mcps",
+        "--no-custom-instructions",
+        "--no-ask-user",
+        "--stream",
+        "off",
+        "--log-level",
+        "none"
+      ],
+      "daily_calls": 10,
+      "monthly_calls": 10,
+      "max_prompt_chars": 20000,
+      "timeout": 300,
+      "cwd": "empty",
+      "version_cmd": [
+        "copilot",
+        "--no-auto-update",
+        "--version"
+      ],
+      "expect_version": "1.0.103"
+    }
+  },
+  "tools": {
+    "print3d": {
+      "url": "http://172.17.0.1:8000"
+    }
+  },
+  "autopilot": {
+    "max_builds_per_day": 4,
+    "max_waiting_ok": 3,
+    "max_files": 10,
+    "max_lines": 400,
+    "timeout": 1800,
+    "timeout_factor": 3,
+    "max_timeout": null,
+    "estimates": {
+      "default_minutes": 20,
+      "by_product": {
+        "story-writer": 240
+      },
+      "by_repo": {}
+    },
+    "board_agents": {
+      "local": "local-fleet@gpu-server",
+      "claude": "claude-A@gpu-server"
+    }
+  }
+}

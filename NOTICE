@@ -1,0 +1,22 @@
+fleet-tasks
+Copyright 2026 BoalsMakerGroup
+
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+
+This project includes code derived from third-party software:
+
+- screen.py: the AI-defence patterns are ported from Ruflo's threat
+  detection service (ruvnet/claude-flow, v3/@claude-flow/aidefence).
+  Copyright (c) 2024-2026 ruvnet. MIT License. Permission is hereby granted,
+  free of charge, to any person obtaining a copy of this software and
+  associated documentation files, to deal in the Software without
+  restriction, subject to including this notice. THE SOFTWARE IS PROVIDED
+  "AS IS", WITHOUT WARRANTY OF ANY KIND.
+
+- hooks/claude_hook.py: the dangerous-command idea comes from Ruflo's
+  dangerous-command list (ruvnet/claude-flow, MIT, same notice as above).
+
+fleet-tasks ships no AI model weights. Models are pulled by each install
+under their own licences (MODEL-LICENSES.md). Programs it runs but doesn't
+include (Ollama, Tailscale, git, gh, poppler's pdftotext, vendor AI CLIs)
+are listed with their licences in REQUIREMENTS.md and tools.json.

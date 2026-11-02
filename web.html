@@ -1,0 +1,962 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fleet tasks</title>
+<style>
+/* One column of panels: what needs you first, then machines, budget, queue, ask, help. */
+:root {
+  --bg: #f4f6f8; --panel: #fff; --ink: #18202a; --muted: #5b6776; --line: #dce2e8;
+  --accent: #2357a6; --accent-soft: #e4ecf8;
+  --ok: #23703d; --ok-soft: #e2f2e7; --warn: #8f5a00; --warn-soft: #fbefd6; --bad: #a3322b; --bad-soft: #f8e2df;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; --mono: ui-monospace, "Cascadia Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root {
+  --bg: #11161c; --panel: #19212a; --ink: #e3e9ef; --muted: #98a5b3; --line: #2b3641;
+  --accent: #7fa8ea; --accent-soft: #1d2b40;
+  --ok: #7ccf92; --ok-soft: #173123; --warn: #e5ad55; --warn-soft: #3a2b12; --bad: #ef8a80; --bad-soft: #3b1d1a; color-scheme: dark } }
+* { box-sizing: border-box }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 var(--font); padding: 16px }
+.wrap { max-width: 1000px; margin: 0 auto; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px }
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px }
+h1 { font-size: 22px; margin: 0 }
+h2 { font-size: 16px; margin: 0 0 10px; display: flex; align-items: center; gap: 6px }
+.muted { color: var(--muted); font-size: 13px }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px }
+section.attn { border-color: var(--warn); background: var(--warn-soft) }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px }
+.machine { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 2px; min-width: 0 }
+.designs { display: grid; gap: 8px }
+.design { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: flex; gap: 10px; align-items: flex-start; min-width: 0 }
+.design img { width: 160px; height: 160px; object-fit: contain; flex: none; background: var(--bg) }
+.design > div { min-width: 0; display: grid; gap: 4px }
+@media (max-width: 480px) { .design { flex-direction: column } .design img { width: 100%; height: auto; max-width: 320px } }
+.machine .name { font-weight: 700 }
+.machine .why { font-size: 13px; color: var(--muted); overflow-wrap: anywhere }
+.pill + .pill { margin-left: 4px }
+.pill { display: inline-block; font: 600 12px var(--font); padding: 1px 9px; border-radius: 999px; background: var(--accent-soft); color: var(--accent) }
+.s-free, .s-done, .s-approved, .s-parts { background: var(--ok-soft); color: var(--ok) }
+.s-working, .s-claimed, .s-split { background: var(--accent-soft); color: var(--accent) }
+.s-busy, .s-queued, .s-needs_approval, .s-up, .s-paused { background: var(--warn-soft); color: var(--warn) }
+.s-down, .s-failed, .s-denied, .s-blocked, .s-expired, .s-cancelled { background: var(--bad-soft); color: var(--bad) }
+.budget { display: grid; grid-template-columns: 90px minmax(0, 1fr) auto; gap: 6px 12px; align-items: center }
+.bar { height: 10px; background: var(--line); border-radius: 5px; overflow: hidden }
+.bar span { display: block; height: 100%; background: var(--accent) }
+table { width: 100%; border-collapse: collapse; font-size: 14px }
+th, td { text-align: left; padding: 7px 6px; border-top: 1px solid var(--line); vertical-align: top }
+th { font-size: 12px; color: var(--muted); font-weight: 600; border-top: 0 }
+tr.task { cursor: pointer } tr.task:hover td { background: var(--accent-soft) }
+.tablewrap { overflow-x: auto }
+@media (max-width: 600px) { #queueTable th:nth-child(5), #queueTable td:nth-child(5) { display: none } }
+.preview { color: var(--muted); font-size: 13px; overflow-wrap: anywhere }
+button { font: 600 14px var(--font); border-radius: 7px; border: 1px solid var(--accent); background: var(--accent); color: #fff; padding: 6px 14px; cursor: pointer }
+button.alt { background: transparent; color: var(--accent) }
+button.danger { background: var(--bad); border-color: var(--bad) }
+button:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+.help { border: 1px solid var(--line); background: transparent; color: var(--muted); border-radius: 50%; width: 22px; height: 22px; padding: 0; font-size: 12px; line-height: 1 }
+.tip { font-size: 13px; color: var(--muted); background: var(--accent-soft); border-radius: 6px; padding: 6px 10px; margin: 4px 0 8px }
+form { display: grid; gap: 10px }
+label { font-weight: 600; font-size: 14px; display: grid; gap: 4px }
+textarea, select { font: 14px var(--font); color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 7px; padding: 8px; width: 100% }
+textarea { min-height: 110px; resize: vertical }
+.sugg { display: flex; gap: 8px; align-items: flex-start; margin: 6px 0; font-weight: 400 }
+.sugg input { margin-top: 3px }
+button.mic { background: var(--panel); color: var(--ink); border-color: var(--line); font-weight: 500; padding: 8px 14px; margin: 4px 0 }
+button.mic.on { background: #c0392b; border-color: #c0392b; color: #fff }
+button.mic:disabled { opacity: .6; cursor: wait }
+.row { display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center }
+#backlogBox button:disabled { opacity: .45; cursor: not-allowed }
+#backlogBox td .row { gap: 6px; flex-wrap: nowrap }
+@media (max-width: 600px) { #backlogBox th:nth-child(2), #backlogBox td:nth-child(2) { display: none } #backlogBox td .row { flex-wrap: wrap } }
+.check { font-weight: 400; display: flex; gap: 6px; align-items: center }
+.wait { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; padding: 8px 0; border-top: 1px solid var(--line) }
+.wait:first-of-type { border-top: 0 }
+dialog { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--ink); max-width: min(800px, 94vw); width: 100% }
+.docview { font: 16px/1.6 Georgia, "Times New Roman", serif; overflow-wrap: anywhere; max-height: 55vh; overflow-y: auto;
+           border: 1px solid var(--line); border-radius: 6px; padding: 12px 16px }
+.docview h2 { font-size: 19px; margin: 14px 0 6px } .docview h3 { font-size: 17px; margin: 12px 0 4px } .docview h4 { font-size: 15px }
+.docview table { border-collapse: collapse; display: block; overflow-x: auto } .docview th, .docview td { border: 1px solid var(--line); padding: 4px 6px }
+.docview pre { max-height: none } .docview.live { white-space: pre-wrap; font: 13px var(--mono) }
+.preview { font: 12px var(--mono); white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); background: var(--bg);
+           border-radius: 6px; padding: 6px 8px; max-height: 7.5em; overflow: hidden; cursor: pointer; margin-top: 4px }
+a.btn { display: inline-block; padding: 6px 12px; border-radius: 6px; text-decoration: none; border: 1px solid var(--line) }
+dialog pre { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg); padding: 10px; border-radius: 6px; max-height: 40vh; overflow-y: auto; font: 13px var(--mono) }
+details summary { cursor: pointer; font-weight: 600 }
+code { font: 13px var(--mono); background: var(--bg); padding: 1px 5px; border-radius: 4px }
+.err { color: var(--bad); font-weight: 600 }
+.tabs { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--line); margin: 10px 0 14px; position: sticky; top: 0; background: var(--bg); z-index: 5; padding-top: 4px }
+.tabs .tab { background: transparent; color: var(--ink); border: 1px solid transparent; border-bottom: 0; border-radius: 8px 8px 0 0; padding: 8px 14px; font-weight: 600 }
+.tabs .tab[aria-selected="true"] { background: var(--panel); border-color: var(--line); margin-bottom: -1px }
+.owtask { border-top: 1px solid var(--line); padding: 10px 0 }
+.owtask:first-child { border-top: 0 }
+.owtask ol { margin: 6px 0 6px 20px; padding: 0 }
+.owcmd { display: flex; gap: 8px; align-items: center; margin: 4px 0 }
+.owcmd code { flex: 1; overflow-x: auto; white-space: pre }
+.owtask textarea { min-height: 54px }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Fleet tasks</h1>
+    <span class="muted" id="fresh">Loading…</span>
+    <span style="margin-left:auto" class="row">
+      <span id="pauseState" class="pill s-paused" hidden title="No machine is taking new work. Tasks already running finish; the queue keeps the rest.">Paused</span>
+      <button id="pauseBtn" class="alt" title="Pause all: no machine (local or paid) starts new work. Running tasks finish and nothing in the queue is lost. Press again to resume.">Pause all</button>
+      <span id="stopState" class="pill"></span>
+      <button id="stopBtn" class="danger" title="Stops every call to Claude and Gemini at once. Local machines keep working. Press again to allow them.">Stop paid AI</button>
+    </span>
+  </header>
+  <p class="err" id="error" hidden></p>
+
+  <section id="waitingBox" class="attn" hidden>
+    <h2>Waiting for your OK <button class="help" data-help="h-wait" aria-label="What is this?">?</button></h2>
+    <p class="tip" id="h-wait" hidden>The local machines couldn't finish these, or they ask for a paid model. Approve sends the task to Claude or Gemini once, using today's budget. Deny stops it. Nothing paid runs until you press Approve.</p>
+    <div id="waiting"></div>
+  </section>
+
+  <nav class="tabs" role="tablist" aria-label="Sections">
+    <button type="button" role="tab" class="tab" data-tab="now" id="tabbtn-now" title="The queue, the machines and today's paid AI use" aria-controls="tab-now">Now</button>
+    <button type="button" role="tab" class="tab" data-tab="backlog" id="tabbtn-backlog" title="The AI board's open work, its build queues and the autopilot" aria-controls="tab-backlog">AI backlog</button>
+    <button type="button" role="tab" class="tab" data-tab="yours" id="tabbtn-yours" title="Board tasks only you can do, with the commands to run and your answer" aria-controls="tab-yours">Your tasks <span class="pill s-needs" id="owCount" hidden></span></button>
+    <button type="button" role="tab" class="tab" data-tab="ask" id="tabbtn-ask" title="Send the fleet a job, and design jobs" aria-controls="tab-ask">Ask</button>
+    <button type="button" role="tab" class="tab" data-tab="more" id="tabbtn-more" title="Job watch, screen hits, models, memory, how to use, and the paid AI log" aria-controls="tab-more">More</button>
+  </nav>
+
+  <div class="tabpane" id="tab-now" role="tabpanel" aria-labelledby="tabbtn-now" hidden>
+  <section>
+    <h2>Queue <button class="help" data-help="h-queue" aria-label="What is this?">?</button></h2>
+    <p class="tip" id="h-queue" hidden>Your jobs, newest first, 40 to a page (job watch's routine checks are in their own section below): Older and Newer move between pages (the page you're on keeps updating). A split job is one row; its parts are inside it. On a phone the latest step is hidden. Tap a row to see what was asked, every step it took (which machine, a check that failed, a move up a size), and the answer.</p>
+    <div class="tablewrap"><table id="queueTable">
+      <thead><tr><th>#</th><th>Kind</th><th>Status</th><th>Where</th><th>Latest step</th></tr></thead>
+      <tbody id="queue"></tbody>
+    </table></div>
+    <div class="row pager" id="pager" hidden>
+      <button type="button" class="alt" id="newer" title="Back toward the newest jobs">← Newer</button>
+      <span class="muted" id="pageInfo"></span>
+      <button type="button" class="alt" id="older" title="Older jobs">Older →</button>
+      <button type="button" class="alt" id="newest" title="Back to the newest jobs">Newest</button>
+    </div>
+  </section>
+
+
+  <section>
+    <h2>Machines <button class="help" data-help="h-mach" aria-label="What is this?">?</button></h2>
+    <p class="tip" id="h-mach" hidden>Every AI machine on the tailnet. <b>free</b>: ready for work. <b>working</b>: on a task (number shown). <b>busy</b>: another program's model is loaded, so the fleet waits rather than push it out (a Story Writer book keeps its GPUs). <b>down</b>: asleep or not serving. Size: tiny ≤4B, small 7-8B, large 24-27B. Work starts on the smallest size that can do it.</p>
+    <div class="grid" id="machines"></div>
+  </section>
+
+
+  <section>
+    <h2>Paid AI today <button class="help" data-help="h-budget" aria-label="What is this?">?</button></h2>
+    <p class="tip" id="h-budget" hidden>Calls to Claude, Gemini and Copilot through your own subscriptions, counted since midnight (Copilot also by month). Each one has its own daily limit; <b>Raise</b> gives one more calls for today only, with your OK (any number). <b>Plan usage</b> is each plan's own count, read without spending any of it: Copilot's from GitHub, Claude's from this machine's session logs (Google reports no Gemini quota without a request). It's read every 15 minutes. Each call needs your OK, and the OK carries over if one is locked out and the next one answers. A call that hit a usage lock isn't counted. Once every limit is reached or every one is locked, an approved task keeps your OK and runs when one frees up. The log at the bottom lists every call and lock.</p>
+    <div class="budget" id="budget"></div>
+    <div id="usage" class="muted" hidden></div>
+    <p class="muted" id="turns" hidden title="Turns in your own Claude Code sessions on gpu-server today, counted by the optional Stop hook. It only counts; it never blocks anything."></p>
+  </section>
+
+  </div>
+
+  <div class="tabpane" id="tab-backlog" role="tabpanel" aria-labelledby="tabbtn-backlog" hidden>
+  <section id="backlogBox">
+    <details id="bkBox" open>
+      <summary><h2 style="display:inline-flex">Backlog <button class="help" data-help="h-backlog" aria-label="What is this?">?</button></h2> <span class="muted" id="bkSummary">loading the AI board…</span></summary>
+      <p class="tip" id="h-backlog" hidden>The AI board's open work in your order: product first (the ranks below), then the oldest item. <b>Best AI</b> is who should do it and why (an item you assigned keeps your choice). <b>Assign</b> hands it to that AI on the board, so its next session picks it up first. <b>Plan</b> asks the fleet for a written plan (an ordinary task in the Queue). <b>Build</b> makes the change: a new branch, the edit by Aider on a local model (free) or Claude Code with edit tools only (paid: waits for your OK), then a <b>draft PR</b> for you to review. Builds never touch main, never run the code they write (CI on the PR does), and a change over the size limit is refused. <b>Queues:</b> each AI has its own build queue and worker, one build at a time. Each build has a time estimate (Story Writer work in hours); a waiting build's time starts only when the one ahead of it finishes. A build is never stopped for taking long: well past its estimate it's flagged <b>seems stalled</b> for you to look at. When one AI is unavailable (Ollama not answering, a paid AI locked by its usage limit, switched off or out of calls), only its queue waits; the others keep building. <b>Autopilot</b> fills each queue by itself in this order, one build at a time per queue, up to its daily limit in all; Stop and Pause stop it too. The same order is on the claude.ai page "Backlog product priority".</p>
+      <div class="row">
+        <label title="Off: nothing is built unless you press Build. On: the fleet builds small items itself, in this order."><input type="checkbox" id="bkAuto"> Autopilot</label>
+        <span class="muted" id="bkAutoInfo"></span>
+        <button type="button" class="alt" id="bkReload" title="Read the board again now">Reload</button>
+      </div>
+      <div id="bkQueues" class="row" aria-label="Build queues, one per AI"></div>
+      <div id="bkWaiting"></div>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Item</th><th>Product · added</th><th>Best AI</th><th>Do</th></tr></thead>
+        <tbody id="bkItems"></tbody>
+      </table></div>
+      <details id="bkOrderBox"><summary>Product order and repos</summary>
+        <div id="bkRanks" class="row"></div>
+        <div class="row">
+          <label title="Which item of a product is offered first">Within a product <select id="bkWithin" title="Which item of a product is offered first"><option value="oldest">oldest first</option><option value="newest">newest first</option><option value="priority">item priority, then oldest</option></select></label>
+        </div>
+        <div class="row">
+          <input id="bkRepo" placeholder="repo, e.g. my-board-repo" maxlength="100" title="A repo name; a new one is added">
+          <select id="bkRepoTo" title="The product it counts as"></select>
+          <input id="bkNewProd" placeholder="or a new product's name" maxlength="40" title="Leave empty to use the product on the left">
+          <button type="button" class="alt" id="bkSaveOrder" title="Save the ranks, the order within a product, and the repo above, to the board">Save to the board</button>
+        </div>
+        <p class="muted" id="bkOrderMsg"></p>
+      </details>
+      <div id="bkBuilds"></div>
+    </details>
+  </section>
+
+  </div>
+
+  <div class="tabpane" id="tab-yours" role="tabpanel" aria-labelledby="tabbtn-yours" hidden>
+  <section id="ownerBox">
+    <h2>Your tasks <button class="help" data-help="h-owner" aria-label="What is this?">?</button> <span class="muted" id="owSummary"></span></h2>
+    <p class="tip" id="h-owner" hidden>Board items only you can do: decisions, sign-ins, things on your machines. Each shows what to do and the commands to run (press <b>Copy</b>). When it's handled, write a note if it helps the AI that waits on it, then press <b>I did it</b>, <b>Approve</b> or <b>Deny</b> (Deny needs a reason). Your answer and note go on the board, and the work waiting on it can start.</p>
+    <div id="owList"><p class="muted">Loading…</p></div>
+  </section>
+  </div>
+
+  <div class="tabpane" id="tab-ask" role="tabpanel" aria-labelledby="tabbtn-ask" hidden>
+  <section>
+    <h2>Ask the fleet <button class="help" data-help="h-ask" aria-label="What is this?">?</button></h2>
+    <p class="tip" id="h-ask" hidden>Write the job and pick its kind. The kind decides which size of machine starts it. The answer appears in the queue.</p>
+    <form id="ask">
+      <label for="kind" title="Which size of machine starts the job. Summaries start small; drafts and reviews start on a 27B machine; 'hard' goes straight to the paid-AI gate.">Kind
+        <select id="kind" name="kind"></select></label>
+      <label for="prompt" title="What you want done, with any text it needs. Don't paste passwords or keys: anything that looks like one is never sent to paid AI.">What to do
+        <textarea id="prompt" name="prompt" required placeholder="Summarise this in five bullet points: …"></textarea></label>
+      <div class="row">
+        <label for="repo" title="A checkout on gpu-server whose code the job reads. Its tracked files go into the prompt (never .env, keys or databases); too much for one machine is split across machines and merged.">Code to read
+          <select id="repo" name="repo"><option value="">(none: only what I write)</option></select></label>
+        <label for="paths" title="Files or folders in that checkout, separated by commas, like src/api.py, static/js. Empty: the whole checkout. Start typing to see its paths.">Files or folders
+          <input id="paths" name="paths" list="pathList" placeholder="all of it" disabled></label>
+        <label for="pr" title="Or a pull request's number in that checkout: the job reads the PR's changes instead of the files.">or PR number
+          <input id="pr" name="pr" inputmode="numeric" pattern="[0-9]*" placeholder="122" disabled></label>
+        <datalist id="pathList"></datalist>
+      </div>
+      <label for="urls" title="Public web pages for a research question, one address per line (at most 10). Each page is read safely (never a private or tailnet address), screened for text aimed at the AI, which is cut out, and given to the model as material to read, not instructions. Pick kind 'research'.">Web pages to read
+        <textarea id="urls" name="urls" placeholder="https://example.com/page (one per line; leave empty if none)"></textarea></label>
+      <label for="use" title="Earlier tasks whose question and answer this job should build on: pick from the list or type numbers, like 238, 252 (at most 5). Writing #238 in 'What to do' does the same. For a plain question; to add pages, code or a document, send those first and follow up on the answer.">Use earlier work
+        <input id="use" name="use" inputmode="numeric" placeholder="task numbers, like 238, 252 (or write #238 in the question)"></label>
+      <label for="earlierList" title="Recent finished jobs: pick one to add it to 'Use earlier work'">Add a finished job
+        <select id="earlierList"><option value="">(pick to add)</option></select></label>
+      <label for="docFile" title="A document for the job to read: text, Markdown, CSV, JSON, HTML, Word (.docx) or PDF, up to 10 MB. It's checked by the same safety screen as web pages (text aimed at the AI is cut out) and given to the model as material to read. A long one is split across machines. Write what to do with it in 'What to do'.">Attach a document
+        <input type="file" id="docFile" accept=".txt,.md,.markdown,.csv,.tsv,.json,.log,.xml,.yaml,.yml,.ini,.py,.js,.ts,.html,.htm,.rtf,.docx,.pdf"></label>
+      <label for="splitText" id="splitBox" hidden title="The long text to split (a log, a chapter, many emails). 'What to do' above is done to each part, then the answers are merged.">Text to split
+        <textarea id="splitText" name="splitText" placeholder="Paste the long text here. It's cut at blank lines into parts of about 6,000 characters."></textarea></label>
+      <div class="row">
+        <label class="check" title="A second model on another machine reads the answer. If it finds a real problem, the task moves up a size and is done again."><input type="checkbox" id="check"> Have another model check it</label>
+        <label class="check" title="If the local machines can't do it, the task may ask for Claude or Gemini. It still waits for your OK."><input type="checkbox" id="frontier"> May ask for paid AI</label>
+        <label class="check" title="For long text: it's cut into parts, free machines answer the parts at the same time, then a 27B machine merges the answers into one. Parts never use paid AI."><input type="checkbox" id="split"> Split across machines</label>
+        <button type="submit" title="Put the job in the queue. A free machine of the right size takes it, usually within a minute.">Send</button>
+        <span id="sent" class="muted"></span>
+      </div>
+    </form>
+  </section>
+
+
+  <section>
+    <h2>Designs <button class="help" data-help="h-design" aria-label="What is this?">?</button></h2>
+    <p class="tip" id="h-design" hidden>Turn a finished idea (like #301's list of gaming accessories) into checked 3D parts. A local model lists every candidate part, <b>one printed part per design</b>; a product made of several parts gets an <b>assembly</b> row that waits for all its parts. Each part gets a brief (its purpose and size), then a build spec; <b>structural</b> parts are built in OpenSCAD by the 3D print tool and their size is checked against the brief (a wrong size is rebuilt, up to 3 tries). <b>artistic</b> parts wait for the image generator. When a part is <span class="pill s-needs_approval">ready to look at</span>, check the picture: <b>Approve</b>, or <b>Change</b> and say what. <b>Make a manual</b> (an option) writes step-by-step build instructions for an approved part or a whole product. <b>Approve</b> saves the part on gpu-server in <code>~/designs/idea-&lt;task&gt;/&lt;product&gt;/&lt;part&gt;/</code> (STL, preview, spec, brief; the manual goes there too); each row says where, and <b>Download (zip)</b> gives you a part, a whole product, or (on the "parts of" row) the whole idea. All of it runs on local models; paid AI only with your OK.</p>
+    <div class="row">
+      <input id="dsTask" inputmode="numeric" size="8" placeholder="Task #, e.g. 301" title="A finished task whose answer has the ideas to design">
+      <input id="dsFocus" placeholder="Which idea (optional)" title="Leave empty for every idea in that answer, or name one (e.g. dice tray)">
+      <button type="button" id="dsStart" title="A local model lists the candidate parts; each becomes its own design">Design from it</button>
+    </div>
+    <div id="designs" class="designs"></div>
+  </section>
+
+  </div>
+
+  <div class="tabpane" id="tab-more" role="tabpanel" aria-labelledby="tabbtn-more" hidden>
+  <section>
+    <details id="watchBox">
+      <summary>Job watch checks <span class="muted" id="watchCount"></span> <span class="pill s-failed" id="watchProblems" hidden></span> <button class="help" data-help="h-watch" aria-label="What is this?">?</button></summary>
+      <p class="tip" id="h-watch" hidden>Routine checks, kept out of the queue so they don't bury your jobs. Each scheduled job (PR reviews, the Owner View feed, the nightly scans) is read by a local model after it runs. <b>ok</b> means its output looked normal; anything else is a problem, also reported on the board. Tap a row for the output the model read.</p>
+      <div class="tablewrap"><table><thead><tr><th>#</th><th>When</th><th>Job</th><th>Verdict</th><th>Note</th></tr></thead><tbody id="watchList"></tbody></table></div>
+      <div class="row pager" id="watchPager" hidden>
+        <button type="button" class="alt" id="wNewer" title="Back toward the newest checks">← Newer</button>
+        <span class="muted" id="wPageInfo"></span>
+        <button type="button" class="alt" id="wOlder" title="Older checks">Older →</button>
+      </div>
+    </details>
+  </section>
+
+
+  <section id="screenBox" hidden>
+    <h2>Screen hits <button class="help" data-help="h-screen" aria-label="What is this?">?</button></h2>
+    <p class="tip" id="h-screen" hidden>Web pages read for research tasks are checked before any model sees them. Text aimed at the AI ("ignore your previous instructions…", "you are now…") is cut out; a page with a jailbreak or several such passages is dropped. A research task with anything cut can only use paid AI with your OK. <b>cut</b> = removed, <b>drop</b> = page not used, <b>log</b> = only noted (common words like "base64").</p>
+    <div class="tablewrap"><table><thead><tr><th>When</th><th>Task</th><th>What</th><th>Page</th></tr></thead><tbody id="screenList"></tbody></table></div>
+  </section>
+
+
+  <section>
+    <details id="modelsBox">
+      <summary>Models <span class="pill s-needs_approval" id="propCount" hidden title="Scores waiting for your OK"></span> <button class="help" data-help="h-models" aria-label="What is this?">?</button></summary>
+      <p class="tip" id="h-models" hidden>Which model takes which kind of work. Scores (0 to 10) come from public reviews and benchmarks, read by a research task; each shows its source. <b>None counts until you accept it.</b> Without scores, each machine uses its own model and paid AI its usual one. Local, free models are always tried first; a machine only switches model when it's idle and the other model scores at least 2 higher. "ours" is how often that model's checked answers passed here (it counts from 20 tasks). New proposals: <code>fleet.py scores propose</code>.</p>
+      <div id="proposals"></div>
+      <div class="tablewrap"><table><thead id="modelsHead"></thead><tbody id="modelsBody"></tbody></table></div>
+    </details>
+  </section>
+
+
+  <section>
+    <h2>Memory <button class="help" data-help="h-mem" aria-label="What is this?">?</button></h2>
+    <p class="tip" id="h-mem" hidden>Notes the fleet and your Claude sessions keep for later: answers, decisions, things to remember. Search finds notes by meaning (a local model on gpu-server indexes them) or, while no machine is free, by the words in them. Anything that looks like a password or key is never saved. Only you can delete a note.</p>
+    <form id="memForm" class="row">
+      <label for="memQ" title="What you're looking for, in your own words, like 'why did we keep two GPU lanes'. Empty: the latest notes.">Search
+        <input id="memQ" name="memQ" placeholder="the latest notes"></label>
+      <button type="submit" title="Find the notes that best match">Search</button>
+      <span id="memCount" class="muted"></span>
+    </form>
+    <div id="memList"></div>
+  </section>
+
+
+  <section>
+    <details>
+      <summary>How to use</summary>
+      <ol>
+        <li><b>Send a job.</b> In "Ask the fleet", pick <b>summarize</b>, paste the text, press Send. Within a minute a free small machine takes it; its row in the Queue turns <span class="pill s-done">finished</span>. Tap the row to read the answer.</li>
+        <li><b>Review code.</b> Pick <b>review</b>, write what to look for (for example "Security and coding-standard problems, file by file"), then under <b>Code to read</b> pick the checkout and either some files or folders, or a PR number. The files go to the machine with the request; a big checkout or PR is split across machines and the answers merged.</li>
+        <li><b>A careful job.</b> Pick <b>review</b>, tick "Have another model check it". A 27B machine answers, the other 27B checks. If the check fails, the step log says why and the job moves up.</li>
+        <li><b>Paid AI.</b> Pick <b>hard</b> (or tick "May ask for paid AI"). The task appears under "Waiting for your OK" with the reason. Press <b>Approve</b> to send it to Claude once, or <b>Deny</b>. "Paid AI today" shows what's left of the 10 a day.</li>
+        <li><b>Stop everything paid.</b> Press <b>Stop paid AI</b> at the top. Nothing goes to Claude, Gemini or Copilot until you press it again. Local machines carry on.</li>
+        <li><b>A paid AI is "locked"?</b> It used up its plan's usage (Claude's 5-hour window, Gemini's day, Copilot's month). Approved tasks go to the next one at once: Claude, then Gemini, then Copilot, which is only used when both others can't (10 a month). When all are locked the task waits with your OK kept and runs when one frees up. <b>Unlock</b> clears a lock early.</li>
+        <li><b>A long job.</b> Write what to do (for example "List every error and its time"), tick <b>Split across machines</b> and paste the long text. Free machines answer the parts at the same time; the row shows "3 of 8 parts done", then one 27B machine merges the answers.</li>
+        <li><b>Cancel one task.</b> Tap its row in the Queue, then <b>Cancel task</b>. If a machine is already working on it, the machine finishes but the answer is thrown away.</li>
+        <li><b>Pause everything.</b> Press <b>Pause all</b> at the top: no machine starts anything new, tasks already running finish, and the queue keeps the rest. Press <b>Resume</b> to carry on.</li>
+        <li><b>"moved up ×2"?</b> A check failed, so the task went to a bigger machine. Hover the pill (or tap the row) to see why.</li>
+        <li><b>Find a note.</b> In <b>Memory</b>, type what you're after in your own words and press Search. Each note shows where it came from and when; press <b>Delete</b> to remove one. Claude sessions save and search notes too.</li>
+        <li><b>Research the web.</b> Pick <b>research</b>, write the question, and put the pages to read under <b>Web pages to read</b>, one per line. Each page is screened first: text aimed at the AI is cut and shows under <b>Screen hits</b>. The answer says which page each point came from.</li>
+        <li><b>A machine is down?</b> It's asleep or not serving; the fleet skips it and uses the others. Its work goes back to the queue after 30 minutes if it went quiet mid-task.</li>
+      </ol>
+      <p class="muted">From the terminal on gpu-server: <code>fleet.py submit summarize "text"</code>, <code>fleet.py submit review "what to check" --repo my-app --path src/api.py</code> (or <code>--pr 122</code>; <code>fleet.py repos</code> lists checkouts), <code>fleet.py status 12</code>, <code>fleet.py approve 12</code>. If this page is down: <code>fleet.py top</code> shows the same on one terminal screen and can approve, cancel, pause and stop. Details: RUNBOOK.md.</p>
+    </details>
+  </section>
+
+
+  <section>
+    <details>
+      <summary>Paid AI log</summary>
+      <div class="tablewrap"><table><thead><tr><th>When</th><th>What</th><th>Task</th></tr></thead><tbody id="ledger"></tbody></table></div>
+    </details>
+  </section>
+  </div>
+</div>
+
+<dialog id="detail">
+  <h2 id="dTitle"></h2>
+  <p class="muted" id="dMeta"></p>
+  <div id="dParts" hidden><h3>Parts</h3><div class="row" id="dPartList"></div></div>
+  <h3>Asked</h3><pre id="dPrompt"></pre>
+  <details><summary title="The pages, code or text the model was given along with the request">Everything the model was given</summary><pre id="dFull"></pre></details>
+  <h3>Answer <span class="pill s-claimed" id="dLive" hidden title="A machine is writing this answer now; it updates every few seconds">writing…</span></h3>
+  <div class="row" id="dDocLinks" hidden>
+    <a class="btn" id="dDoc" target="_blank" rel="noopener" title="Open the answer as a document page you can read, print or save as PDF">Open as document</a>
+    <a class="btn alt" id="dDocx" title="Download the answer as a Word file (.docx)">Download Word</a>
+    <a class="btn alt" id="dBuilt" target="_blank" rel="noopener" hidden title="The answer is a whole web page: open it on its own (sealed: it can't reach the fleet or the internet)">Open the web page it built</a>
+  </div>
+  <div id="dResult" class="docview"></div>
+  <p class="muted" id="dFollowOf" hidden></p>
+  <p class="muted" id="dOnly" hidden>Paid AI for this task: <select id="dOnlySel" title="Limit this task to one paid AI (for example Gemini only). Others, Copilot included, are never used for it; it waits if that one is busy or used up. Logged with your login."></select> <span id="dHidden"></span></p>
+  <section id="dFollow" hidden>
+    <h3>Follow up <button class="help" data-help="h-follow" aria-label="What is this?">?</button></h3>
+    <p class="tip" id="h-follow" hidden>Build on this answer. Each follow-up is a new task that gets this task's question and answer as context, so you don't paste them again. Tick suggestions from the answer to start one task for each, or write your own question. Follow-ups show here and in the queue.</p>
+    <div id="dSuggestBox" hidden>
+      <p class="muted">Suggestions in this answer: tick the ones to work on next.</p>
+      <div id="dSuggest"></div>
+      <div class="row"><button type="button" id="dStartTicked" title="Start one task for each ticked suggestion, with this answer as context" disabled>Start ticked suggestions</button></div>
+    </div>
+    <label for="fPrompt" title="Your next question about this answer. It gets the question and answer above as context.">Your follow-up
+      <textarea id="fPrompt" placeholder="Turn point 2 into step-by-step instructions…"></textarea></label>
+    <div class="row">
+      <label for="fKind" title="Which kind of work the follow-up is: the same as this task, except that a follow-up of a paid-AI ('hard') task starts on the local 27B machines ('draft'). Pick 'hard' to send it to paid AI (it still waits for your OK).">Kind <select id="fKind"></select></label>
+      <button type="button" id="fSend" title="Start the follow-up task">Send follow-up</button>
+      <span class="muted" id="fSent"></span>
+    </div>
+    <div id="dFollowList" class="row"></div>
+  </section>
+  <details><summary title="What happened to this task, step by step">Steps</summary><pre id="dNotes"></pre></details>
+  <div class="row">
+    <button id="dCancel" class="danger" hidden title="Stop this task. If a machine is running it now, its answer is thrown away.">Cancel task</button>
+    <form method="dialog"><button class="alt" title="Close this window. The task carries on.">Close</button></form>
+  </div>
+</dialog>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const el = (tag, attrs = {}, ...kids) => { const n = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) { if (k === "class") n.className = v; else if (k === "text") n.textContent = v; else n.setAttribute(k, v); }
+    for (const k of kids) if (k != null) n.append(k); return n; };
+  const api = async (path, body) => {
+    const r = await fetch(path, body === undefined ? {} : { method: "POST", headers: { "X-Fleet": "1", "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || ("HTTP " + r.status));
+    return data;
+  };
+  const showError = msg => { $("error").hidden = !msg; $("error").textContent = msg || ""; };
+  document.querySelectorAll(".help").forEach(b => b.addEventListener("click", () => { const t = $(b.dataset.help); t.hidden = !t.hidden; }));
+  const AGO = m => m < 1 ? "just now" : m < 60 ? m + " min ago" : m < 1440 ? Math.floor(m / 60) + " h ago" : Math.floor(m / 1440) + " d ago";
+  const WHERE = t => t.status === "claimed" ? (t.worker || "") : (t.by || t.tier);
+  const MACHINE_WORDS = { free: "free", working: "working", busy: "busy", down: "down" };
+  let kindsLoaded = false, last = null;
+
+  function showUsage(u) {
+    const box = $("usage");
+    box.hidden = !u;
+    if (!u) return;
+    const rows = [el("b", { text: "Plan usage" }), el("span", { text: " (read " + (u.at || "").replace("T", " ").slice(0, 16) + ", no AI asked)" })];
+    const cp = u.copilot || {};
+    if (cp.error) rows.push(el("div", { text: "Copilot: " + cp.error }));
+    else if (cp.unlimited) rows.push(el("div", { text: "Copilot: " + cp.plan + " plan, unlimited" }));
+    else if (cp.of != null) {
+      rows.push(el("div", { title: "GitHub's own count for the whole account, not only the fleet's calls",
+        text: "Copilot: " + cp.used + " of " + cp.of + " premium credits used (" + cp.left_pct + "% left), resets " + cp.resets }));
+      if (cp.overage_on) rows.push(el("div", { class: "pill s-failed", title: "Change it in GitHub > Settings > Copilot if you don't want charges past the plan",
+        text: "Copilot overage is ON: up to " + cp.overage_max + " more credits can be billed" }));
+    }
+    const cl = u.claude;
+    if (cl) rows.push(el("div", { title: "Claude Code session logs on this machine (other machines and claude.ai aren't counted). Cache reads are cheaper and shown apart.",
+      text: "Claude (this machine): today " + cl.today.turns + " replies, " + cl.today.tokens.toLocaleString() + " tokens · this month " +
+        cl.month.turns + " replies, " + cl.month.tokens.toLocaleString() + " tokens" }));
+    rows.push(el("div", { text: "Gemini: Google reports no remaining quota without a request; the fleet's calls are above." }));
+    box.replaceChildren(...rows);
+  }
+
+  function render(s) {
+    last = s;
+    $("fresh").textContent = "Updated " + new Date().toLocaleTimeString();
+    $("stopState").textContent = s.stop ? "Paid AI stopped" : "Paid AI allowed (with your OK)";
+    $("stopState").className = "pill " + (s.stop ? "s-denied" : "s-free");
+    $("stopBtn").textContent = s.stop ? "Allow paid AI" : "Stop paid AI";
+    $("stopBtn").className = s.stop ? "" : "danger";
+    $("pauseState").hidden = !s.paused;
+    $("pauseBtn").textContent = s.paused ? "Resume" : "Pause all";
+
+    $("waitingBox").hidden = !s.waiting.length;
+    $("waiting").replaceChildren(...s.waiting.map(t => {
+      const approve = el("button", { title: "Send this task to paid AI once (Claude, or the next one if Claude is locked out). Uses one of today's calls.", text: "Approve" });
+      const deny = el("button", { class: "alt", title: "Don't use paid AI for this task. It stops here.", text: "Deny" });
+      approve.onclick = () => act("/api/approve/" + t.id); deny.onclick = () => act("/api/deny/" + t.id);
+      return el("div", { class: "wait" }, el("div", {}, el("b", { text: "#" + t.id + " " + t.kind + ": " }), el("span", { text: t.preview }),
+        el("div", { class: "muted", text: t.last_note }),
+        t.would_use ? el("div", { class: "muted", title: "Which paid model answers if you approve now (best fit for this kind, within today's calls)", text: "Would use: " + t.would_use }) : null),
+        el("div", { class: "row" }, approve, deny));
+    }));
+
+    $("machines").replaceChildren(...s.machines.map(m => el("div", { class: "machine", title: m.why },
+      el("div", { class: "row" }, el("span", { class: "name", text: m.name }), el("span", { class: "pill s-" + m.state, text: MACHINE_WORDS[m.state] || m.state })),
+      el("div", { class: "muted", text: m.tier + " · " + m.model }), el("div", { class: "why", text: m.why }),
+      m.job && m.job.preview ? (() => { const p = el("div", { class: "preview", title: "What it's writing now (tap to open the task)", text: "…" + m.job.preview.slice(-300) });
+        p.onclick = () => openTask(m.job.id); return p; })() : null,
+      m.last ? el("div", { class: "muted", title: "The last task this machine finished, and how long ago",
+        text: "last: #" + m.last.id + " " + m.last.status + (m.last.ago_min == null ? "" : ", " + AGO(m.last.ago_min)) }) : null)));
+
+    const budgetRow = (name, used, limit, on, note, p) => {
+      const pct = limit ? Math.min(100, 100 * used / limit) : 0; const bar = el("div", { class: "bar" }, el("span", { style: "width:" + pct + "%" }));
+      let words = on ? used + " of " + limit + " used" : "off";
+      if (p && on && p.monthly != null) words += " · " + p.month + " of " + p.monthly + " this month";
+      if (p && p.last_resort) words += " · last resort";
+      const info = el("span", { class: "muted", title: note, text: words });
+      let raise = null;
+      if (p && on) {
+        raise = el("button", { class: "alt", title: "Your OK to give " + p.name + " more calls today only (back to " + (p.limit - (p.raised || 0)) + " at midnight). Tasks waiting for paid AI start right away. Logged with your login.", text: "Raise" });
+        raise.onclick = () => {
+          const n = prompt("Add how many " + p.name + " calls for today? (back to normal at midnight)", "10");
+          if (n === null) return;
+          if (!/^\d+$/.test(n.trim())) { showError("Type a number, like 10."); return; }
+          if (confirm("Allow " + n.trim() + " more " + p.name + " calls today? Waiting tasks start now.")) act("/api/budget/raise", { provider: p.name, n: +n.trim() });
+        };
+        if (p.raised) info.textContent += " · raised by " + p.raised + " today";
+      }
+      if (!(p && p.locked_until)) return [el("b", { text: name }), bar, el("span", {}, info, raise)];
+      const until = p.locked_until.replace("T", " ").slice(0, 16);
+      const unlock = el("button", { class: "alt", title: "Clear this lock now, if you know its usage has reset. Tasks waiting for paid AI try again.", text: "Unlock" });
+      unlock.onclick = () => act("/api/unlock/" + p.name);
+      return [el("b", { text: name }), bar, el("span", {}, info, el("span", { class: "pill s-denied", title: p.lock_reason, text: "locked until " + until }), unlock, raise)];
+    };
+    $("budget").replaceChildren(...(s.total.limit == null
+        ? [el("b", { text: "All paid AI" }), el("span", {}), el("span", { class: "muted", title: "Each paid AI has its own limit below; there's no limit on all of them together", text: s.total.used + " calls today (each has its own limit)" })]
+        : budgetRow("All paid AI", s.total.used, s.total.limit, true, "Every paid AI together, today")),
+      ...s.providers.flatMap(p => budgetRow(p.name, p.used, p.limit, p.enabled, p.note, p)));
+    const sc = (s.screen || []).filter(e => e.severity !== "log");
+    $("screenBox").hidden = !sc.length;
+    $("screenList").replaceChildren(...sc.map(e => el("tr", {}, el("td", { text: (e.at || "").replace("T", " ") }),
+      el("td", { text: e.task ? "#" + e.task : "" }), el("td", { title: e.match || "", text: e.severity + ": " + (e.category || "").replace(/_/g, " ") }),
+      el("td", { class: "preview", text: e.url || "" }))));
+    showUsage(s.usage);
+    $("turns").hidden = s.claude_turns == null; $("turns").textContent = "Your Claude sessions today: " + s.claude_turns + " turns";
+
+    $("queue").replaceChildren(...(s.tasks.length ? s.tasks.map(t => {
+      const tr = el("tr", { class: "task", tabindex: "0", title: "Tap to see the steps and the answer" },
+        el("td", { text: t.id }), el("td", { text: t.kind }),
+        el("td", {}, el("span", { class: "pill s-" + t.status, text: t.status_words }),
+          t.parts ? el("span", { class: "pill s-parts", title: "This job was too long for one machine, so it was split. The parts run at the same time, their answers are merged (in rounds when there are many), and this row holds the one combined answer. Tap to see the parts.",
+            text: t.status === "done" ? "combined from " + t.parts.total + " parts"
+              : t.parts.round === 0 ? t.parts.done + " of " + t.parts.total + " parts done"
+              : t.status === "split" ? "merging, round " + t.parts.round + ": " + t.parts.round_done + " of " + t.parts.round_total
+              : "final merge" }) : null,
+          t.escalations ? el("span", { class: "pill s-up", title: "Why it moved up: " + t.escalated_why, text: "moved up ×" + t.escalations }) : null,
+          t.uses ? el("span", { class: "pill s-parts", title: "It builds on the answer of " + t.uses.split(",").map(i => "#" + i).join(", "), text: "builds on " + t.uses.split(",").map(i => "#" + i).join(", ") }) : null),
+        el("td", { text: WHERE(t) }), el("td", { class: "preview", text: t.last_note || t.preview }));
+      tr.onclick = () => openTask(t.id); tr.onkeydown = e => { if (e.key === "Enter") openTask(t.id); };
+      return tr;
+    }) : [el("tr", {}, el("td", { colspan: "5", class: "muted", text: "No tasks yet. Send one below." }))]));
+
+    const w = s.watch;
+    $("watchCount").textContent = "(" + w.count + ")";
+    $("watchProblems").hidden = !w.problems_today;
+    $("watchProblems").textContent = w.problems_today + " problem" + (w.problems_today === 1 ? "" : "s") + " today";
+    $("watchList").replaceChildren(...(w.checks.length ? w.checks.map(t => {
+      const bad = t.verdict && t.verdict !== "ok";
+      const tr = el("tr", { class: "task", tabindex: "0", title: "Tap to see the output the model read and its answer" },
+        el("td", { text: t.id }), el("td", { text: (t.updated || "").replace("T", " ").slice(5, 16) }), el("td", { text: t.job }),
+        el("td", {}, el("span", { class: "pill s-" + (bad ? "failed" : t.verdict ? "done" : t.status), text: t.verdict || t.status_words })),
+        el("td", { class: "preview", text: t.note }));
+      tr.onclick = () => openTask(t.id); tr.onkeydown = e => { if (e.key === "Enter") openTask(t.id); };
+      return tr;
+    }) : [el("tr", {}, el("td", { colspan: "5", class: "muted", text: "No checks yet." }))]));
+    wPage = w.page; $("watchPager").hidden = w.pages < 2;
+    $("wPageInfo").textContent = "Page " + (w.page + 1) + " of " + w.pages;
+    $("wNewer").disabled = w.page === 0; $("wOlder").disabled = w.page >= w.pages - 1;
+
+    if (document.activeElement !== $("earlierList"))
+      $("earlierList").replaceChildren(el("option", { value: "", text: "(pick to add)" }),
+        ...(s.earlier || []).map(e => el("option", { value: String(e.id), text: "#" + e.id + " " + e.ask })));
+
+    if (!kindsLoaded) {
+      $("kind").replaceChildren(...s.kinds.map(k => el("option", { value: k.name, text: k.name + " (starts " + k.tier + ")" })));
+      const keep = $("fKind").dataset.want; $("fKind").replaceChildren(...s.kinds.map(k => el("option", { value: k.name, text: k.name + " (starts " + k.tier + ")" })));
+      if (keep) $("fKind").value = keep;
+      $("kind").value = "summarize"; kindsLoaded = true;
+    }
+    $("ledger").replaceChildren(...(s.ledger.length ? s.ledger.map(e => el("tr", {},
+      el("td", { text: (e.at || "").replace("T", " ") }), el("td", { text: e.event + (e.provider ? " " + e.provider : "") + (e.error ? ": " + e.error : "") }),
+      el("td", { text: e.task ? "#" + e.task : "" }))) : [el("tr", {}, el("td", { colspan: "3", class: "muted", text: "No paid AI used yet." }))]));
+  }
+
+  let qPage = 0, wPage = 0;
+  const showPager = q => {
+    if (!q) return;
+    qPage = q.page;                                   // the server keeps it in range
+    $("pager").hidden = q.pages < 2;
+    $("pageInfo").textContent = "Page " + (q.page + 1) + " of " + q.pages + " · jobs " + (q.page * q.rows + 1) + "–" +
+      Math.min(q.jobs, (q.page + 1) * q.rows) + " of " + q.jobs;
+    $("newer").disabled = $("newest").disabled = q.page === 0; $("older").disabled = q.page >= q.pages - 1;
+  };
+  const goPage = n => { qPage = Math.max(0, n); refresh(); };
+  $("newer").onclick = () => goPage(qPage - 1);
+  $("older").onclick = () => goPage(qPage + 1);
+  $("newest").onclick = () => goPage(0);
+  $("wNewer").onclick = () => { wPage = Math.max(0, wPage - 1); refresh(); };
+  $("wOlder").onclick = () => { wPage += 1; refresh(); };
+  async function refresh() { try { const want = qPage, wWant = wPage, s = await api("/api/state?page=" + want + "&wpage=" + wWant);
+    if (want !== qPage || wWant !== wPage) return;                       // a page change happened meanwhile: that refresh shows it
+    render(s); showPager(s.queue_page); showError(""); loadDesigns(); } catch (e) { showError("Can't reach the fleet: " + e.message); } }
+  const DESIGN_WORDS = { parts: "listing parts", listed: "parts listed", brief: "writing the brief", prompt: "writing the spec",
+    build: "building", look: "ready to look at", approved: "approved", image: "waits for the image generator",
+    assembly: "assembly", failed: "gave up", cancelled: "cancelled" };
+  const DESIGN_PILL = { look: "needs_approval", approved: "done", failed: "failed", cancelled: "cancelled", listed: "done" };
+  async function loadDesigns() {
+    let r; try { r = await api("/api/designs"); } catch (e) { return; }
+    const box = $("designs");
+    if (box.contains(document.activeElement)) return;               // don't redraw under a tap
+    box.replaceChildren(...r.designs.filter(d => d.stage !== "cancelled").slice(0, 60).map(d => {
+      const btn = (text, title, fn, alt) => { const b = el("button", { class: alt ? "alt" : "", title: title, text: text }); b.onclick = fn; return b; };
+      const acts = [];
+      if (d.stage === "look") {
+        acts.push(btn("Approve", "The part looks right: keep it", () => act("/api/design/" + d.id + "/approve").then(loadDesigns)));
+        acts.push(btn("Change", "Say what to change; it's rewritten and built again", () => {
+          const w = prompt("What should change in " + d.name + "?"); if (w && w.trim()) act("/api/design/" + d.id + "/change", { words: w.trim() }).then(loadDesigns); }, true));
+      }
+      if ((d.stage === "approved" || d.stage === "assembly") && (!d.manual || d.manual === "failed"))
+        acts.push(btn("Make a manual", "Step-by-step build instructions (a local model writes them" + (d.stage === "assembly" ? " once every part is approved" : "") + ")",
+          () => act("/api/design/" + d.id + "/manual").then(loadDesigns), true));
+      if (d.manual === "done") acts.push(el("a", { href: "/api/design/" + d.id + "/manual.md", text: "Manual" }));
+      else if (d.manual) acts.push(el("span", { class: "muted", text: "manual: " + d.manual }));
+      if (d.size) acts.push(el("a", { href: "/api/design/" + d.id + "/part.stl", title: "The built part, to slice and print", text: "STL" }));
+      if (d.render) for (const v of ["top", "bottom"])
+        acts.push(el("a", { href: "/api/design/" + d.id + "/render-" + v + ".png", target: "_blank", title: "The part seen from straight " + (v === "top" ? "above" : "below") + " (what the shape check looked at)", text: v }));
+      if (d.saved) acts.push(el("a", { href: "/api/design/" + d.id + "/files.zip", title: "Everything kept in " + d.saved + " as one zip", text: "Download (zip)" }));
+      if (!["approved", "listed", "failed", "cancelled"].includes(d.stage))
+        acts.push(btn("Cancel", "Stop this design", () => { if (confirm("Cancel " + d.name + "?")) act("/api/design/" + d.id + "/cancel").then(loadDesigns); }, true));
+      const size = d.size ? JSON.parse(d.size).join(" × ") + " mm" : "";
+      return el("div", { class: "design" },
+        d.render ? el("img", { src: "/api/design/" + d.id + "/render.png?u=" + encodeURIComponent(d.updated), alt: "Preview of " + d.name, loading: "lazy", width: "160", height: "160" }) : null,
+        el("div", {},
+          el("div", { class: "row" }, el("b", { text: "D" + d.id + " " + d.name }),
+            el("span", { class: "pill s-" + (DESIGN_PILL[d.stage] || "queued"), text: DESIGN_WORDS[d.stage] || d.stage }),
+            d.route ? el("span", { class: "muted", text: d.route }) : null),
+          d.product ? el("div", { class: "muted", text: "part of " + d.product }) : null,
+          el("div", { class: "muted", text: [size, d.note].filter(Boolean).join(" · ") }),
+          el("div", { class: "muted", title: d.saved ? "Working files: " + d.work : "Approve copies the files to the kept folder",
+                      text: d.saved ? "Saved in " + d.saved + " (on gpu-server)" : "Working files: " + d.work + " (not kept until approved)" }),
+          el("div", { class: "row" }, ...acts)));
+    }));
+  }
+  $("dsStart").onclick = () => {
+    const t = +($("dsTask").value || "").replace("#", "").trim();
+    if (!t) { showError("Type the task number to design from, like 301."); return; }
+    act("/api/design/start", { task: t, focus: $("dsFocus").value.trim() }).then(() => { $("dsTask").value = ""; $("dsFocus").value = ""; loadDesigns(); });
+  };
+  async function act(path, body = {}) { try { await api(path, body); await refresh(); } catch (e) { showError(e.message); } }
+  async function openTask(id, again) {
+    try { const t = await api("/api/task/" + id);
+      $("dTitle").textContent = "#" + t.id + " " + t.kind + ": " + t.status_words;
+      $("dMeta").textContent = "Size " + t.tier + " · tries " + t.attempts + (t.by ? " · answered by " + t.by : "") + (t.source ? " · read " + t.source : "") + (t.routed ? " · " + t.routed : "") + " · " + t.updated;
+      linked($("dPrompt"), t.ask || t.prompt); $("dFull").textContent = t.prompt; linked($("dNotes"), t.notes || "(none yet)");
+      const live = t.status === "claimed" && !t.result; $("dLive").hidden = !live;
+      $("dResult").className = "docview" + (t.result ? "" : " live");
+      if (t.result_html) $("dResult").innerHTML = t.result_html;      // built and escaped by the server (doc.py)
+      else $("dResult").textContent = t.partial || (live ? "Starting…" : "(no answer yet)");
+      if (live) $("dResult").scrollTop = $("dResult").scrollHeight;
+      $("dDocLinks").hidden = !t.result; $("dDoc").href = "/doc/" + t.id; $("dDocx").href = "/doc/" + t.id + ".docx"; $("dBuilt").hidden = !t.built_page; $("dBuilt").href = "/doc/" + t.id + "/page";
+      clearTimeout(openTask.timer);
+      if (["claimed", "queued", "approved"].includes(t.status)) openTask.timer = setTimeout(() => { if ($("detail").open) openTask(t.id, true); }, 3000);
+      $("dParts").hidden = !(t.parts || []).length;
+      $("dPartList").replaceChildren(...(t.parts || []).map(x => { const b = el("button", { class: "alt", title: "Open this part", text: (x.part >= 1000 ? "merge " + Math.floor(x.part / 1000) + "." + (x.part % 1000 + 1) : "part " + x.part) + ": " + x.status_words });
+        b.onclick = () => openTask(x.id); return b; }));
+      showFollow(t, again);
+      $("dCancel").hidden = !((last && last.cancellable) || []).includes(t.status);
+      $("dCancel").onclick = async () => { $("detail").close(); await act("/api/cancel/" + t.id); };
+      if (!again || !$("detail").open) $("detail").showModal(); } catch (e) { showError(e.message); }
+  }
+  // "#238" in a question or the steps opens that task; answers get the same links from the server (doc.py)
+  const linked = (node, text) => {
+    const out = []; let at = 0;
+    for (const m of text.matchAll(/(?<![\w&;\/="'#])#(\d{1,7})\b/g)) {
+      out.push(text.slice(at, m.index));
+      const a = el("a", { href: "#task=" + m[1], title: "Open task #" + m[1], text: m[0] });
+      a.onclick = ev => { ev.preventDefault(); openTask(+m[1]); }; out.push(a); at = m.index + m[0].length;
+    }
+    out.push(text.slice(at)); node.replaceChildren(...out);
+  };
+  window.addEventListener("hashchange", () => { const m = /^#task=(\d+)$/.exec(location.hash);
+    if (m) { history.replaceState(null, "", "/"); openTask(+m[1]); } });
+  let followId = 0;
+  function showOnly(t) {
+    const opts = t.route_options || [];
+    $("dOnly").hidden = !opts.length;                // only before the work starts
+    if (!opts.length) return;
+    const sel = $("dOnlySel"), now = t.only || "";
+    if (document.activeElement === sel) return;      // don't reset it while you choose
+    const best = opts.find(o => o.recommended), shown = opts.filter(o => !o.hidden || o.name === now);
+    const label = o => o.name + " only" + (o.recommended ? " (suggested)" : "") +
+      (o.tasks ? `, ${Math.round(o.pass_rate * 100)}% of ${o.tasks} ${t.kind} tasks OK` : ", no results yet") +
+      (o.free ? ", free now" : ", " + o.why) + (o.fits_kind ? "" : ", not its usual pick");
+    sel.replaceChildren(el("option", { value: "", text: "any, in the usual order" + (best ? " (suggested: " + best.name + ")" : "") }),
+      ...shown.map(o => el("option", { value: o.name, text: label(o) })));
+    const hid = opts.length - shown.length;
+    sel.title = "Point this task at another paid AI before it starts. The suggestion learns from how each AI did on " +
+      t.kind + " tasks." + (hid ? ` ${hid} hidden: they fail most ${t.kind} tasks.` : "");
+    $("dHidden").replaceChildren(...opts.filter(o => o.hidden && o.name !== now).map(o => {
+      const b = el("button", { text: "Show " + o.name + " again", title: `${o.name} failed ${Math.round((1 - o.pass_rate) * 100)}% of its last ${o.tasks} ${t.kind} tasks, so it's hidden and tried last. This clears those results (a newer model may do better); the suggestion relearns from new ones. Logged with your login.` });
+      b.onclick = () => act("/api/paid-reset", { name: o.name, kind: t.kind }).then(() => openTask(t.id, true));
+      return b;
+    }));
+    sel.value = now;
+    sel.onchange = () => act("/api/only/" + t.id, { providers: sel.value ? [sel.value] : [] }).then(() => openTask(t.id, true));
+  }
+
+  function showFollow(t, again) {
+    showOnly(t);
+    const uses = (t.uses || "").split(",").filter(Boolean);
+    $("dFollowOf").hidden = !uses.length;
+    linked($("dFollowOf"), uses.length ? "Builds on " + uses.map(i => "#" + i).join(", ") : "");
+    const done = t.status === "done" && !!t.result;
+    $("dFollow").hidden = !done;
+    $("dFollowList").replaceChildren(...(t.followups || []).map(x => { const b = el("button", { class: "alt", title: x.ask, text: "#" + x.id + ": " + x.status_words });
+      b.onclick = () => openTask(x.id); return b; }));
+    if (!done || (again && followId === t.id)) return;              // keep what's ticked or typed while it refreshes
+    followId = t.id; $("fPrompt").value = ""; $("fSent").textContent = "";
+    const k = ((last && last.kinds) || []).find(x => x.name === t.kind);
+    const want = k && k.tier === "frontier" ? ((last && last.followup_kind) || "draft") : t.kind;   // paid AI only when you pick it
+    $("fKind").dataset.want = want; $("fKind").value = want;
+    const items = t.suggestions || [];
+    $("dSuggestBox").hidden = !items.length;
+    $("dSuggest").replaceChildren(...items.map((s, i) => el("label", { class: "check sugg" }, el("input", { type: "checkbox", "data-i": i }), " " + s)));
+    $("dStartTicked").disabled = true;
+    $("dSuggest").onchange = () => { const n = $("dSuggest").querySelectorAll("input:checked").length;
+      $("dStartTicked").disabled = !n; $("dStartTicked").textContent = n ? "Start " + n + " ticked suggestion" + (n > 1 ? "s" : "") : "Start ticked suggestions"; };
+    $("dStartTicked").onclick = async () => {
+      const ticked = [...$("dSuggest").querySelectorAll("input:checked")].map(x => items[+x.dataset.i]);
+      const ids = [];
+      try { for (const s of ticked) ids.push((await api("/api/followup/" + t.id, { prompt: "Work on this suggestion from the earlier answer, in detail: " + s, kind: $("fKind").value })).id);
+        $("fSent").textContent = "Started " + ids.map(i => "#" + i).join(", "); $("dSuggest").querySelectorAll("input").forEach(x => { x.checked = false; });
+        $("dStartTicked").disabled = true; refresh(); openTask(t.id, true); } catch (e) { showError(e.message); } };
+    $("fSend").onclick = async () => {
+      try { const r = await api("/api/followup/" + t.id, { prompt: $("fPrompt").value, kind: $("fKind").value });
+        $("fSent").textContent = "Sent as #" + r.id; $("fPrompt").value = ""; refresh(); openTask(t.id, true); } catch (e) { showError(e.message); } };
+  }
+  $("stopBtn").onclick = () => act("/api/stop", { on: !(last && last.stop) });
+  $("pauseBtn").onclick = () => act("/api/pause", { on: !(last && last.paused) });
+  const b64 = buf => { let s = ""; const a = new Uint8Array(buf); for (let i = 0; i < a.length; i += 0x8000) s += String.fromCharCode(...a.subarray(i, i + 0x8000)); return btoa(s); };
+  $("earlierList").onchange = () => { const v = $("earlierList").value; if (!v) return;
+    const have = $("use").value.match(/\d+/g) || []; if (!have.includes(v)) $("use").value = [...have, v].join(", ");
+    $("earlierList").value = ""; };
+  $("ask").onsubmit = async ev => { ev.preventDefault();
+    const file = $("docFile").files[0];
+    if (file) {
+      if ($("urls").value.trim() || $("repo").value || $("split").checked || $("use").value.trim()) { showError("Attach a document, or pick web pages, code, text to split or earlier work: one of them. To combine, send the document first and follow up on its answer."); return; }
+      if (file.size > 10e6) { showError(file.name + " is over 10 MB. Attach a smaller part of it."); return; }
+      try { $("sent").textContent = "Reading " + file.name + "…";
+        const r = await api("/api/document", { name: file.name, data: b64(await file.arrayBuffer()), kind: $("kind").value, prompt: $("prompt").value,
+          check: $("check").checked, frontier: $("frontier").checked });
+        $("sent").textContent = "Sent as #" + r.id + (r.notes ? " · " + r.notes.join(" · ") : ""); $("prompt").value = ""; $("docFile").value = ""; goPage(0);
+      } catch (e) { $("sent").textContent = ""; showError(e.message); }
+      return;
+    }
+    try { const r = await api("/api/submit", { kind: $("kind").value, prompt: $("prompt").value, check: $("check").checked, frontier: $("frontier").checked,
+        split_text: $("split").checked ? $("splitText").value : "", urls: $("urls").value, use: $("use").value, repo: $("repo").value, paths: $("paths").value, pr: $("pr").value });
+      $("sent").textContent = "Sent as #" + r.id + (r.notes ? " · " + r.notes.join(" · ") : ""); $("prompt").value = ""; $("urls").value = ""; $("splitText").value = ""; $("use").value = ""; goPage(0); } catch (e) { showError(e.message); } };
+  $("repo").onchange = async () => { const name = $("repo").value;
+    $("paths").disabled = $("pr").disabled = !name; $("paths").value = ""; $("pr").value = ""; $("pathList").replaceChildren();
+    if (!name) return;
+    try { const r = await api("/api/repos/" + encodeURIComponent(name)); $("pathList").replaceChildren(...r.paths.map(x => el("option", { value: x }))); }
+    catch (e) { showError(e.message); } };
+  api("/api/repos").then(r => $("repo").append(...r.repos.map(n => el("option", { value: n, text: n })))).catch(e => showError(e.message));
+  async function loadMemory() {
+    try { const r = await api("/api/memory?q=" + encodeURIComponent($("memQ").value.trim()));
+      $("memCount").textContent = (r.total + " notes" + (r.waiting_for_vector ? ", " + r.waiting_for_vector + " waiting to be indexed" : ""));
+      $("memList").replaceChildren(...(r.notes && r.notes.length ? r.notes.map(n => {
+        const del = el("button", { class: "alt", title: "Delete this note for good", text: "Delete" });
+        del.onclick = async () => { if (confirm("Delete note " + n.id + "?")) { await act("/api/memory/delete/" + n.id); loadMemory(); } };
+        return el("div", { class: "wait" }, el("div", {}, el("div", { class: "muted", text: "#" + n.id + " · " + (n.created || "").replace("T", " ") + " · " + (n.source || "no source")
+            + (n.tags.length ? " · " + n.tags.join(", ") : "") + (n.how ? " · matched by " + n.how + " (" + n.score + ")" : "") }),
+          el("div", { text: n.text.length > 600 ? n.text.slice(0, 600) + "…" : n.text })), el("div", { class: "row" }, del));
+      }) : [el("p", { class: "muted", text: r.query ? "Nothing matches." : "No notes yet." })]));
+    } catch (e) { showError(e.message); }
+  }
+  async function loadModels() {
+    try { const r = await api("/api/models");
+      $("propCount").hidden = !r.proposed.length; $("propCount").textContent = r.proposed.length + " to check";
+      $("proposals").replaceChildren(...r.proposed.map(it => {
+        const ok = el("button", { title: "Use this score when picking a model for " + it.kind + " work", text: "Accept" });
+        const no = el("button", { class: "alt", title: "Don't use this score", text: "Reject" });
+        ok.onclick = async () => { await act("/api/scores/accept/" + it.id); loadModels(); };
+        no.onclick = async () => { await act("/api/scores/reject/" + it.id); loadModels(); };
+        const src = /^https?:\/\//i.test(it.source) ? el("a", { href: it.source, target: "_blank", rel: "noopener noreferrer", text: it.source })
+          : el("span", { text: it.source });
+        return el("div", { class: "wait" }, el("div", {}, el("b", { text: it.model + " · " + it.kind + ": " + it.score }),
+          el("div", { class: "muted" }, src, document.createTextNode((it.date ? " · " + it.date : "") + (it.note ? " · " + it.note : "")))), el("div", { class: "row" }, ok, no));
+      }));
+      $("modelsHead").replaceChildren(el("tr", {}, el("th", { text: "Model" }), el("th", { text: "Runs on" }), ...r.kinds.map(k => el("th", { text: k }))));
+      $("modelsBody").replaceChildren(...r.models.map(m => el("tr", {}, el("td", { title: m.cost + (m.weight > 1 ? ", counts " + m.weight + " calls" : ""), text: m.name }),
+        el("td", { class: "muted", text: m.where }),
+        ...r.kinds.map(k => { const f = m.fits[k]; return el("td", f ? { title: f.why, text: f.fit + (f.ours != null ? " (ours " + f.ours + "%)" : "") } : { class: "muted", text: "–" }); }))));
+    } catch (e) { showError(e.message); }
+  }
+  $("modelsBox").ontoggle = () => { if ($("modelsBox").open) loadModels(); };
+  loadModels();
+  $("memForm").onsubmit = ev => { ev.preventDefault(); loadMemory(); };
+  loadMemory();
+  $("split").onchange = () => { $("splitBox").hidden = !$("split").checked; };
+
+  // Voice: a Speak button under each text box. The phone records, gpu-server turns it into words
+  // (voice/voice.py, Whisper on its CPU: the recording never leaves the tailnet), and the words
+  // go in at the cursor. Hidden when the browser can't record or the voice service isn't running.
+  const micType = () => ["audio/webm;codecs=opus", "audio/mp4", "audio/ogg;codecs=opus", "audio/webm"]
+    .find(t => window.MediaRecorder && MediaRecorder.isTypeSupported(t)) || "";
+  const putText = (box, words) => {
+    if (!words) return;
+    const a = box.selectionStart ?? box.value.length, b = box.selectionEnd ?? box.value.length;
+    const before = box.value.slice(0, a), after = box.value.slice(b);
+    const text = (before && !/\s$/.test(before) ? " " : "") + words + (after && !/^\s/.test(after) ? " " : "");
+    box.value = before + text + after;
+    box.selectionStart = box.selectionEnd = a + text.length;
+    box.dispatchEvent(new Event("input", { bubbles: true }));
+  };
+  const addMic = box => {
+    const label = box.closest("label") || box;
+    const btn = el("button", { type: "button", class: "mic", title: "Say it instead of typing. Tap again when you're done; the words go in at the cursor.", text: "🎤 Speak" });
+    label.after(btn);
+    let rec = null, stopTimer = null;
+    btn.onclick = async () => {
+      if (rec) { rec.stop(); return; }
+      let stream;
+      try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+      catch (e) { showError("The microphone isn't allowed: allow it for this page in the browser's settings."); return; }
+      const chunks = [], type = micType();
+      rec = new MediaRecorder(stream, type ? { mimeType: type } : {});
+      rec.ondataavailable = ev => { if (ev.data.size) chunks.push(ev.data); };
+      rec.onstop = async () => {
+        clearTimeout(stopTimer); stream.getTracks().forEach(t => t.stop()); rec = null;
+        btn.classList.remove("on"); btn.disabled = true; btn.textContent = "Writing it down…";
+        try {
+          const r = await fetch("/api/listen", { method: "POST", headers: { "X-Fleet": "1", "Content-Type": "application/octet-stream" }, body: new Blob(chunks, { type: type || "audio/webm" }) });
+          const data = await r.json().catch(() => ({}));
+          if (!r.ok) throw new Error(data.error || ("HTTP " + r.status));
+          if (data.text) { putText(box, data.text); showError(""); } else showError("No words heard. Try again a little closer to the phone.");
+        } catch (e) { showError(e.message); }
+        btn.disabled = false; btn.textContent = "🎤 Speak"; box.focus();
+      };
+      rec.start(); btn.classList.add("on"); btn.textContent = "■ Stop (listening)";
+      stopTimer = setTimeout(() => rec && rec.stop(), 170000);          // the voice service takes 3 minutes at most
+    };
+  };
+  if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder)
+    api("/api/voice").then(r => { if (r.ok) ["prompt", "splitText", "memQ", "fPrompt"].forEach(id => addMic($(id))); }).catch(() => {});
+  refresh(); setInterval(refresh, 5000);
+  const fromDoc = /^#task=(\d+)$/.exec(location.hash);              // "Ask a follow-up" on a document page
+  if (fromDoc) { history.replaceState(null, "", "/"); openTask(+fromDoc[1]); }
+})();
+</script>
+<script>
+// Backlog tab (backlog.py, owner decision D-2026-10-31-05). Loads only while open: each load reads the board.
+(() => {
+  const $ = id => document.getElementById(id);
+  const api = async (path, body) => {
+    const r = await fetch(path, body === undefined ? {} : { method: "POST", headers: { "X-Fleet": "1", "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || ("HTTP " + r.status));
+    return data;
+  };
+  const el = (tag, attrs = {}, ...kids) => { const n = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) { if (k === "class") n.className = v; else if (k === "text") n.textContent = v; else n.setAttribute(k, v); }
+    for (const k of kids) if (k != null) n.append(k); return n; };
+  const BUILD_WORDS = { needs_ok: "waiting for your OK", queued: "queued", running: "building", pr_open: "draft PR open",
+    no_change: "changed nothing", failed: "failed", denied: "you said no" };
+  let data = null, timer = null;
+  const say = (msg, bad) => { $("bkSummary").textContent = msg; $("bkSummary").style.color = bad ? "var(--bad)" : ""; };
+  const act = async (btn, path, body, done) => {
+    btn.disabled = true;
+    try { const r = await api(path, body); const msg = done(r); await load(); say(msg); }
+    catch (e) { say(e.message, true); } finally { btn.disabled = false; }
+  };
+  // A UTC time from the server as local hh:mm (with the day when it isn't today).
+  const clock = iso => { const t = new Date(iso), now = new Date();
+    return (t.toDateString() === now.toDateString() ? "" : t.toLocaleDateString([], { weekday: "short" }) + " ") + t.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); };
+  // How long a build should take, and when it should start or finish (its queue runs one at a time).
+  const timing = (b, plan) => {
+    const est = b.est_minutes ? (b.est_minutes >= 90 ? Math.round(b.est_minutes / 6) / 10 + " h" : Math.round(b.est_minutes) + " min") : "";
+    const p = (plan || {})[b.id];
+    if (!est) return "";
+    if (!p) return " · took about " + est + " est.";
+    if (p.stalled) return " · est " + est + " · SEEMS STALLED (running since " + clock(b.started) + "; still running, not stopped)";
+    if (b.status === "running") return " · est " + est + " · done about " + clock(p.done) + (p.overdue ? " (slower than estimated)" : "");
+    return " · est " + est + " · starts about " + clock(p.start) + " (after the one ahead of it)";
+  };
+  function render() {
+    const d = data, tb = $("bkItems");
+    say(d.items.length + " open AI items · " + (d.owner_tasks || []).length + " in Your tasks · autopilot " + (d.autopilot.on ? "on" : "off"));
+    $("bkAuto").checked = d.autopilot.on;
+    $("bkAutoInfo").textContent = d.autopilot.today + " of " + d.autopilot.max + " autopilot builds today";
+    tb.innerHTML = "";
+    d.items.forEach(it => {
+      const assign = el("select", { "aria-label": "Assign " + it.id + " to", title: "Hand this item to an AI on the board" },
+        el("option", { value: "", text: "Assign to…" }), ...Object.entries(d.routes).map(([k, v]) => el("option", { value: k, text: v })));
+      assign.addEventListener("change", () => { if (assign.value) act(assign, "/api/backlog/assign/" + it.id, { to: assign.value }, () => it.id + " assigned to " + d.routes[assign.value]); });
+      const plan = el("button", { type: "button", class: "alt", title: "Queue a written plan for this item (a fleet task)", text: "Plan" });
+      plan.addEventListener("click", () => act(plan, "/api/backlog/plan/" + it.id, {}, r => "Plan queued as task #" + r.id));
+      const build = el("button", { type: "button", title: "Make the change on a new branch and open a draft PR (paid AI waits for your OK)", text: "Build" });
+      build.addEventListener("click", () => act(build, "/api/backlog/build/" + it.id, {}, r => "Build " + r.build + " queued for " + it.id));
+      const human = it.fit.to === "human", busy = it.build && ["needs_ok", "queued", "running"].includes(it.build.status);
+      if (human || busy) build.disabled = true;
+      const state = it.build ? el("div", { class: "muted", text: "Build " + it.build.id + ": " + (BUILD_WORDS[it.build.status] || it.build.status) + timing(it.build, d.schedule) + (it.build.note ? " · " + it.build.note : "") }) : null;
+      const fit = el("td", {}, el("span", { class: "pill" + (it.fit.auto_ok ? " s-free" : ""), text: it.fit.label, title: it.fit.why + (it.fit.auto_ok ? " · small enough for the autopilot" : "") }),
+        it.claim ? el("div", { class: "muted", text: "claimed by " + it.claim }) : null);
+      tb.append(el("tr", { id: "bk-" + it.id },
+        el("td", {}, el("b", { text: it.id }), " ", it.title, state),
+        el("td", { class: "muted", text: it.product + " · " + it.added + " · " + it.status }),
+        fit,
+        el("td", {}, el("div", { class: "row" }, assign, plan, build))));
+    });
+    $("bkQueues").innerHTML = "";
+    (d.queues || []).forEach(q => {
+      const counts = [q.running && q.running + " running", q.queued && q.queued + " queued", q.needs_ok && q.needs_ok + " need your OK"].filter(Boolean).join(", ") || "empty";
+      const free = q.free_at ? " · free about " + clock(q.free_at) : "";
+      $("bkQueues").append(el("span", { class: "pill " + (q.stalled ? "s-failed" : q.available ? "s-done" : "s-paused"),
+        title: (q.available ? "Ready to build" : "Waiting: " + q.why) + " · takes items for: " + q.routes.join(", "),
+        text: q.label + ": " + (q.stalled ? "a build seems stalled" : q.available ? "ready" : "waiting") + " · " + counts + free }));
+    });
+    const waiting = d.builds.filter(b => b.status === "needs_ok");
+    $("bkWaiting").innerHTML = "";
+    waiting.forEach(b => {
+      const ok = el("button", { type: "button", text: "Approve", title: "Spend one paid call on this build" }), no = el("button", { type: "button", class: "alt", text: "Deny", title: "Don't spend a paid call on this build" });
+      ok.addEventListener("click", () => act(ok, "/api/backlog/approve/" + b.id, {}, () => "Build " + b.id + " approved"));
+      no.addEventListener("click", () => act(no, "/api/backlog/deny/" + b.id, {}, () => "Build " + b.id + " denied"));
+      $("bkWaiting").append(el("p", { class: "tip" }, "Build " + b.id + " (" + b.wp + ", " + (d.builders[b.builder] || b.builder) + ") waits for your OK. ", ok, " ", no));
+    });
+    const ranks = $("bkRanks"); ranks.innerHTML = "";
+    [...d.products].sort((a, b) => a.rank - b.rank).forEach(p => {
+      const sel = el("select", { "data-key": p.key, "aria-label": "Rank of " + p.label });
+      for (let r = 1; r <= 9; r++) sel.append(el("option", { value: r, text: r }));
+      sel.value = p.rank;
+      ranks.append(el("label", { title: (p.repos || []).join(", ") || "repos with no product of their own" }, p.label + " ", sel));
+    });
+    $("bkWithin").value = d.within;
+    const keep = $("bkRepoTo").value; $("bkRepoTo").innerHTML = "";
+    d.products.forEach(p => $("bkRepoTo").append(el("option", { value: p.key, text: p.label })));
+    if (keep) $("bkRepoTo").value = keep;
+    $("bkBuilds").innerHTML = "";
+    if (d.builds.length) {
+      const rows = d.builds.map(b => el("tr", {}, el("td", { text: "#" + b.id }), el("td", { text: b.wp }), el("td", { text: d.builders[b.builder] || b.builder }),
+        el("td", { text: (BUILD_WORDS[b.status] || b.status) + (b.auto ? " · autopilot" : "") + timing(b, d.schedule) }),
+        el("td", {}, b.pr ? el("a", { href: b.pr, target: "_blank", rel: "noopener", text: "PR" }) : (b.note || ""))));
+      $("bkBuilds").append(el("details", {}, el("summary", { text: "Recent builds" }),
+        el("div", { class: "tablewrap" }, el("table", {}, el("tbody", {}, ...rows)))));
+    }
+    const want = location.hash.match(/^#backlog\/([A-Za-z]+-\d+)/);
+    if (want && $("bk-" + want[1])) { $("bk-" + want[1]).scrollIntoView({ block: "center" }); $("bk-" + want[1]).style.outline = "2px solid var(--accent)"; }
+  }
+  async function load() {
+    try { data = await api("/api/backlog"); render(); renderOwner(data); } catch (e) { say(e.message, true); $("owSummary").textContent = e.message; }
+  }
+  // Tabs: one section group at a time instead of one long page. The board is read only
+  // while the AI backlog or Your tasks tab is showing (every minute).
+  const TABS = ["now", "backlog", "yours", "ask", "more"];
+  function showTab(name, remember) {
+    if (!TABS.includes(name)) name = "now";
+    TABS.forEach(k => { $("tab-" + k).hidden = k !== name; $("tabbtn-" + k).setAttribute("aria-selected", String(k === name)); });
+    if (remember) { try { localStorage.setItem("fleetTab", name); } catch (e) { /* private mode: the tab just isn't remembered */ }
+      if (!/^#(task=|backlog\/)/.test(location.hash)) history.replaceState(null, "", "#tab=" + name); }
+    clearInterval(timer);
+    if (name === "backlog" || name === "yours") { load(); timer = setInterval(load, 60000); }
+  }
+  document.querySelectorAll(".tabs .tab").forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab, true)));
+  const fromHash = () => { const h = location.hash;
+    if (h.startsWith("#backlog")) return "backlog";
+    const m = /^#tab=(\w+)/.exec(h); return m ? m[1] : null; };
+  window.addEventListener("hashchange", () => { const k = fromHash(); if (k) showTab(k, false); });
+  let first = fromHash();
+  if (!first) { try { first = localStorage.getItem("fleetTab"); } catch (e) { first = null; } }
+  showTab(first || "now", false);
+
+  // Your tasks: owner tasks from the board, each with what to do, its commands, a note and the answer buttons.
+  function renderOwner(d) {
+    const list = $("owList"), tasks = d.owner_tasks || [];
+    $("owCount").hidden = !tasks.length; $("owCount").textContent = tasks.length;
+    $("owSummary").textContent = tasks.length ? tasks.length + " waiting on you" : "";
+    list.innerHTML = "";
+    if (!tasks.length) { list.append(el("p", { class: "muted", text: "Nothing waiting on you." })); return; }
+    tasks.forEach(o => {
+      const note = el("textarea", { "aria-label": "Your note on " + o.id, placeholder: "Your note: what you did or decided, or why not (the AI that waits on this reads it)", maxlength: "2000" });
+      const msg = el("p", { class: "muted" });
+      const answer = (btn, ans) => async () => {
+        if (ans === "denied" && !note.value.trim()) { msg.textContent = "Write why it's denied, then press Deny."; note.focus(); return; }
+        btn.disabled = true;
+        try { await api("/api/backlog/answer/" + o.id, { answer: ans, comment: note.value }); msg.textContent = "Saved to the board."; await load(); }
+        catch (e) { msg.textContent = e.message; msg.className = "err"; } finally { btn.disabled = false; }
+      };
+      const did = el("button", { type: "button", text: "I did it", title: "Mark this task done on the board, with your note" });
+      const yes = el("button", { type: "button", class: "alt", text: "Approve", title: "Approve what this task asks, with your note" });
+      const no = el("button", { type: "button", class: "danger", text: "Deny", title: "Say no, with the reason in your note" });
+      did.addEventListener("click", answer(did, "done")); yes.addEventListener("click", answer(yes, "approved")); no.addEventListener("click", answer(no, "denied"));
+      const steps = o.steps.length ? el("ol", {}, ...o.steps.map(s => el("li", { text: s }))) : null;
+      const cmds = o.commands.map(c => {
+        const copy = el("button", { type: "button", class: "alt", text: "Copy", title: "Copy this command" });
+        copy.addEventListener("click", async () => { try { await navigator.clipboard.writeText(c); copy.textContent = "Copied"; } catch (e) { copy.textContent = "Select it"; } });
+        return el("div", { class: "owcmd" }, el("code", { text: c }), copy);
+      });
+      list.append(el("div", { class: "owtask", id: "ow-" + o.id },
+        el("div", {}, el("b", { text: o.id }), " ", o.title, " ", el("span", { class: "muted", text: "· " + o.product + " · added " + o.added })),
+        o.next_step ? el("p", { text: o.next_step }) : null, steps,
+        cmds.length ? el("div", {}, el("div", { class: "muted", text: "Commands to run:" }), ...cmds) : null,
+        o.acceptance.length ? el("p", { class: "muted", text: "Done when: " + o.acceptance.join("; ") }) : null,
+        o.waits_on.length ? el("p", { class: "muted", text: "Waits on " + o.waits_on.join(", ") + " first." }) : null,
+        o.unblocks.length ? el("p", { class: "muted", text: "When it's done, the AI can start: " + o.unblocks.join(", ") }) : null,
+        note, el("div", { class: "row" }, did, yes, no), msg));
+    });
+  }
+  $("bkReload").addEventListener("click", load);
+  $("bkAuto").addEventListener("change", () => act($("bkAuto"), "/api/backlog/autopilot", { on: $("bkAuto").checked }, r => "Autopilot " + (r.on ? "on" : "off")));
+  $("bkSaveOrder").addEventListener("click", () => {
+    const spec = { ranks: {}, within: $("bkWithin").value };
+    document.querySelectorAll("#bkRanks select").forEach(s => { spec.ranks[s.dataset.key] = Number(s.value); });
+    const repo = $("bkRepo").value.trim(), name = $("bkNewProd").value.trim();
+    let to = $("bkRepoTo").value;
+    if (name) { to = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40); spec.labels = { [to]: name }; }
+    if (repo) spec.repos = { [repo]: to };
+    act($("bkSaveOrder"), "/api/backlog/order", spec, r => { $("bkRepo").value = ""; $("bkNewProd").value = ""; $("bkOrderMsg").textContent = "Saved: " + r.ok; return "Order saved to the board"; });
+  });
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+# systemd --user: the fleet-tasks web page (web.py) on 127.0.0.1:8960, reached
+# through `tailscale serve` at https://gpu-server.<tailnet>.ts.net:8960.
+[Unit]
+Description=fleet-tasks web page (tailnet only)
+After=network-online.target
+
+[Service]
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=%h/.config/fleet-tasks/web.env
+ExecStart=/usr/bin/python3 /opt/stacks/fleet-tasks/web.py --port 8960
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target
