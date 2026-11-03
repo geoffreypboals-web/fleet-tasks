@@ -1,4 +1,4 @@
-# Runs the test suite on every push and pull request.
+# Runs the test suite and the ruff/bandit lint gate on every push and pull request.
 name: tests
 on:
   push:
@@ -19,3 +19,38 @@ jobs:
           python-version: ${{ matrix.python }}
       - run: python -m pip install pytest
       - run: python -m pytest tests -q -p no:cacheprovider --durations=10
+
+  # ruff and bandit, hash-locked from PyPI (.github/security/requirements-lint.txt,
+  # the same pins as the other fleet repos). Gates only on real errors: ruff's
+  # syntax errors and undefined names (E9, F63, F7, F82), and bandit findings
+  # that are both HIGH severity and HIGH confidence. Full reports are uploaded.
+  python-lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Install ruff 0.17.1 and bandit 1.9.4 (hash-locked)
+        run: pip install --require-hashes -r .github/security/requirements-lint.txt
+      - name: Reports (never fail)
+        run: |
+          ruff check --isolated --no-cache --exit-zero --output-format json --output-file ruff.json .
+          bandit -r . -q -f json -o bandit.json --exit-zero -x "./.git/*,*/.venv/*,*/venv/*"
+      - name: ruff gate (syntax errors, undefined names)
+        run: ruff check --isolated --no-cache --select E9,F63,F7,F82 --output-format github .
+      - name: bandit gate (high severity and high confidence)
+        run: bandit -r . -q -lll -iii -x "./.git/*,*/.venv/*,*/venv/*"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        continue-on-error: true
+        with:
+          name: python-lint-report
+          path: |
+            ruff.json
+            bandit.json
+          retention-days: 14
+          if-no-files-found: ignore
