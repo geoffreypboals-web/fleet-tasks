@@ -37,7 +37,7 @@ needs.
 | GitHub Copilot CLI (`copilot`), signed in | 1.0.103, pinned (`expect_version`; Node 22+; signed in through `gh`) | No Copilot fallback: when Claude and Gemini are both locked out, approved tasks wait instead | `npm i -g @github/copilot@1.0.103` (needs Node 22+), then `copilot login` (or `gh auth login`). Another version: run RUNBOOK's text-only check first |
 | Aider (`aider` on PATH; the `vibe` setup, WP-38) | aider 0.86.2 | Backlog **Build** with the local model can't run; Claude builds still can | `pipx install aider-chat==0.86.2` |
 | Time zone data (`tzdata`, Python's `zoneinfo`) | yes (`/usr/share/zoneinfo`) | Gemini's lock ends at this machine's midnight, not Pacific midnight (a few hours off) | `sudo apt install tzdata` |
-| `node/gpu_free.py` on each shared PC with `gpu_probe` (needs `nvidia-smi` from the NVIDIA driver) | not running on shared-pc yet (WP-149: `scripts\node\Setup-GpuProbe.bat`) | The fleet leaves that PC alone (fails closed) | Copy `node/gpu_free.py` there and run it as a service, with the owner's OK |
+| `node/gpu_free.py` on each shared PC with `gpu_probe` (needs `nvidia-smi` from the NVIDIA driver) | not running on shared-pc yet (WP-149, an owner task on the work board; no setup script exists yet, so it is a manual copy for now) | The fleet leaves that PC alone (fails closed) | Copy `node/gpu_free.py` there and run it as a service, with the owner's OK |
 | The local models listed in `catalog.json` for each machine (`endpoints`) | all pulled on gpu-server (doctor checks each machine) | That model isn't routed there; the machine's own model still works | `ollama pull NAME` on that machine, or remove the machine from that model's `endpoints` |
 | A writable design output folder (`policy.json` `design.output_dir`, default `~/designs`) | `~/designs` (2026-10-28) | Approve can't keep a design's files (STL, preview, spec, brief, manual) or offer them as a zip; the working copies stay in the state folder | nothing extra: it's made on first approval. To keep them elsewhere, set `design.output_dir` |
 | `gpu_lease.py` (in this folder) and its lease folder | installed by `install.sh` | No GPU leases on gpu-server's pairs: work runs without checking them out | nothing extra |
@@ -73,7 +73,7 @@ tool is marked **NO** and is never the default.
 | What | Used for |
 |---|---|
 | Python 3.10 or 3.11 with `pytest` (on gpu-server, a 3.11 venv: `python3.11 -m venv v && v/bin/pip install pytest`, run with `-p no:anyio`) | `tests/test_fleet_*.py` |
-| `ruff` and `bandit` from `.github/security/requirements-lint.txt` (hash-locked) | the CI lint gate |
+| `ruff` and `bandit` from `.github/security/requirements-lint.txt` (hash-locked; `pip install --require-hashes -r .github/security/requirements-lint.txt`) | the CI lint gate (`python-lint` job in `.github/workflows/tests.yml`) |
 
 ## Ports and files
 
